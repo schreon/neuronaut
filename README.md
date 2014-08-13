@@ -7,6 +7,8 @@ neuronaut is meant to be fast, easy to use and easy to extend.
 
 Installation
 ============
+Pycuda: http://wiki.tiker.net/PyCuda/Installation/Linux/Ubuntu
+
 - links to pycuda/pyopencl installations
 - pip install ...
 - library path
