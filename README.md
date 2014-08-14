@@ -2,14 +2,11 @@ neuronaut
 =========
 
 neuronaut is a neural network library written in Python. It has backends for OpenCL and CUDA.
-
 neuronaut is meant to be fast, easy to use and easy to extend.
 
 Dependencies
 ============
-- [reikna ](https://github.com/Manticore/reikna)
-- [pycuda](https://github.com/inducer/pycuda) and/or [pyopencl](https://github.com/inducer/pyopencl)
-- numpy
+neuronaut is based on numpy and [reikna ](https://github.com/Manticore/reikna). reikna again needs [pycuda](https://github.com/inducer/pycuda) and/or [pyopencl](https://github.com/inducer/pyopencl) to run.
 
 Installation
 ============
