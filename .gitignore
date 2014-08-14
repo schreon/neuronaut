@@ -40,6 +40,7 @@ nosetests.xml
 
 # virtualenv
 .env
+.test
 
 # data
 test/data/*
@@ -48,3 +49,7 @@ test/data/*
 *.*~
 
 .settings
+
+# tests are in an own repo
+neuronaut-test
+
