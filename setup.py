@@ -11,8 +11,5 @@ setup(
     license='LICENSE',
     description='Useful towel-related stuff.',
     long_description=open('README.md').read(),
-    install_requires=[
-        "numpy == 1.8.1",
-        "reikna >= 0.6.3",
-    ],
+    install_requires=[]
 )
