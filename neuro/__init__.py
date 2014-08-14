@@ -25,30 +25,14 @@ def create(name, base, *mixins):
     
     return cls
 
-
-
-def convert_weights(net):
-    pass
-
-
 class BaseContext(KernelContext):
     
-    def __init__(self, num_workers=10):
+    def __init__(self):
         super(BaseContext, self).__init__()
         
         self.thread = self.api.Thread.create()
         self.kernel_cache = {}
-        
-        self.workers = []
-        for _ in xrange(num_workers):
-            self.workers.append(self.api.Thread(self.thread._context))
-        
-        self.current_worker = 0
-    
-    def get_worker(self):
-        self.current_worker = (self.current_worker + 1) % len(self.workers)
-        return self.workers[self.current_worker]
-    
+            
     def synchronize(self):
         for w in self.workers:
             w.synchronize()
@@ -61,12 +45,3 @@ class BaseContext(KernelContext):
             return (thread.to_device(arr) for arr in arrays)
         else:          
             return thread.to_device(array)
-        
-class OpenClContext(BaseContext):
-    '''
-    OpenCL context.
-    '''
-    def __init__(self, num_workers=10): 
-        self.api = cluda.ocl_api()  
-        super(OpenClContext, self).__init__(num_workers=num_workers)
-

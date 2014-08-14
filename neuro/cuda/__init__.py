@@ -7,9 +7,9 @@ class CUDAContext(BaseContext):
     '''
     CUDA context.
     '''
-    def __init__(self, num_workers=10): 
+    def __init__(self, *args, **kwargs): 
         self.api = cluda.cuda_api()  
-        super(CUDAContext, self).__init__(num_workers=num_workers)
+        super(CUDAContext, self).__init__(*args, **kwargs)
 
     def dot(self, mat1, mat2, dest, trans_a=False, trans_b=False):
         '''

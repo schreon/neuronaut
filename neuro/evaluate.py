@@ -32,8 +32,9 @@ class ConfigurationEvaluator():
         Performs one training session using the defined neural network configuration.
         '''
         # build the network                
-        network = self.NetworkClass(**self.network_args)        
-        for options in self.network_structure:
+        network = self.NetworkClass(input_shape=self.data_train[0].shape[1], **self.network_args)
+        # skip the first entry because its the input layer        
+        for options in self.network_structure[1:]:
             network.add_layer(options['num_units'], options['function'], options['derivative'], **options)
         network.reset_weights(std=0.01)
         
@@ -65,7 +66,6 @@ class ConfigurationEvaluator():
         :param num_evaluations: number of training sessions
         :param file_name: file to store the results (optional)
         '''
-
         # continue if the file already exists.
         if file_name is not None and os.path.exists(file_name):
             with open(file_name, "rb") as f:
