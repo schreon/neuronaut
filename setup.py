@@ -6,7 +6,7 @@ setup(
     version='0.0.0',
     author='Leon Schröder',
     author_email='schreon.loeder@gmail.com',
-    packages=['neuro'],
+    packages=['neuro', 'neuro.cuda'],
     url='https://github.com/schreon/neuronaut',
     license='LICENSE',
     description='Useful towel-related stuff.',
