@@ -9,7 +9,7 @@ setup(
     packages=['neuro', 'neuro.cuda'],
     url='https://github.com/schreon/neuronaut',
     license='LICENSE',
-    description='Useful towel-related stuff.',
+    description='neural network library accelerated by CUDA and OpenCL.',
     long_description=open('README.md').read(),
     install_requires=[]
 )
