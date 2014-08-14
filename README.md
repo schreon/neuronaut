@@ -10,11 +10,9 @@ neuronaut is based on numpy and [reikna ](https://github.com/Manticore/reikna). 
 
 Installation
 ============
+This repository is still private, so you need to send me your public key. Then you can install neuronaut using pip:
+`pip install git+ssh://git@github.com/schreon/neuronaut.git` It is highly recommended to use [virtualenv](https://pypi.python.org/pypi/virtualenv).
 
-Pycuda: http://wiki.tiker.net/PyCuda/Installation/Linux/Ubuntu
-
-- pip install git+git://github.com/schreon/neuronaut.git
-- library path
 
 Getting started
 ===============
