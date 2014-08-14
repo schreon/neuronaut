@@ -1,7 +1,8 @@
 neuronaut
 =========
 
-neuronaut is a neural network library written in Python. It has backends for OpenCL and CUDA. neuronaut is meant to be fast, easy to use and easy to extend.
+neuronaut is a neural network library written in Python. It has backends for OpenCL and CUDA.
+neuronaut is meant to be fast, easy to use and easy to extend.
 
 Dependencies
 ============
