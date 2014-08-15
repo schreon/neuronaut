@@ -1,13 +1,3 @@
-'''
-Created on Jul 7, 2014
-
-@author: schreon
-
-'''
-
-
-
-
 import logging
 
 import numpy
@@ -271,7 +261,7 @@ class KernelContext(object):
             assert mat1.dtype == mat2.dtype == dest.dtype
             kernel_cache[key] = MatrixMul(
                 mat1, mat2, out_arr=dest, transposed_a=trans_a, transposed_b=trans_b).compile(thread)
-    
+        
         kernel_cache[key](dest, mat1, mat2)
     
     

@@ -1,8 +1,3 @@
-'''
-Created on Jul 7, 2014
-
-@author: schreon
-'''
 import logging
 
 import numpy

@@ -100,7 +100,13 @@ class FeedForwardNeuralNetwork(object):
         for weights, bias in self.weights:
             wgts.append((weights.get(), bias.get()))        
         return wgts
-
+    
+    def upload_weights(self, weights):
+        for i, (w, b) in enumerate(self.weights):
+            (w_cpu, b_cpu) = weights[i]
+            w.set(w_cpu)
+            b.set(b_cpu)     
+        
     def before_propagation(self, layer_index, state, **kwargs):
         pass
     

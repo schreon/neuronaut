@@ -1,9 +1,3 @@
-'''
-Created on Jul 22, 2014
-
-@author: schreon
-'''
-
 import logging
 log = logging.getLogger("backpropagation")
 

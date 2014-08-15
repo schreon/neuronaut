@@ -1,6 +1,8 @@
 import logging
-
 from neuro.kernels import KernelContext
+
+import numpy
+
 import reikna.cluda as cluda
 
 
@@ -32,10 +34,9 @@ class BaseContext(KernelContext):
         
         self.thread = self.api.Thread.create()
         self.kernel_cache = {}
+
             
     def synchronize(self):
-        for w in self.workers:
-            w.synchronize()
         self.thread.synchronize()
     
     def upload(self, array, *arrays):

@@ -7,7 +7,7 @@ class OpenClContext(BaseContext):
     '''
     OpenCL context.
     '''
-    def __init__(self, num_workers=10): 
+    def __init__(self): 
         self.api = cluda.ocl_api()  
-        super(OpenClContext, self).__init__(num_workers=num_workers)
+        super(OpenClContext, self).__init__()
 

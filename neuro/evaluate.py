@@ -1,8 +1,3 @@
-'''
-Created on Jul 23, 2014
-
-@author: schreon
-'''
 import cPickle
 import logging
 import os
@@ -75,10 +70,14 @@ class ConfigurationEvaluator():
             log.info("New evaluation session.")
             results = []
             test_errors = []
-
+        
+        best_weights = None
         for _ in xrange(num_evaluations):
             weights, errors = self.optimize()
             results.append((weights, errors))
+            # new best?
+            if len(test_errors) < 1 or errors['best']['test'] < test_errors[-1]:
+                best_weights = weights
             test_errors.append(errors['best']['test'])
             test_std = numpy.std(test_errors)
             test_mean = numpy.mean(test_errors)
@@ -87,3 +86,4 @@ class ConfigurationEvaluator():
             if file_name is not None:
                 with open(file_name, "wb") as f:
                     cPickle.dump((results, test_errors), f, protocol=-1)
+        return best_weights
