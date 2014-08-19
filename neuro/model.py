@@ -4,25 +4,25 @@ import numpy
 log = logging.getLogger("model")
 
 class LogisticLayer(object):
-    def __init__(self, context, input_shape, output_shape):
+    def __init__(self, context, input_shape, **kwargs):
         log.info("LogisticLayer constructor")
-        super(LogisticLayer, self).__init__(context, input_shape, output_shape)
+        super(LogisticLayer, self).__init__(context, input_shape, **kwargs)
         
         self.transfer_function = context.logistic
         self.transfer_derivative = context.logistic_derivative
 
 class LinearLayer(object):
-    def __init__(self, context, input_shape, output_shape):
+    def __init__(self, context, input_shape, **kwargs):
         log.info("LinearLayer constructor")
-        super(LinearLayer, self).__init__(context, input_shape, output_shape)
+        super(LinearLayer, self).__init__(context, input_shape, **kwargs)
         
         self.transfer_function = context.linear
         self.transfer_derivative = context.linear_derivative
+
+class Convolution2DLayer(object):
     
-class DenseLayer(object):
-    
-    def __init__(self, context, input_shape, output_shape):
-        log.info("DenseLayer constructor")
+    def __init__(self, context, input_shape, output_shape, filter_size=3):
+        log.info("ConvolutionLayer constructor")
         self.context = context
         thr = context.thread
         
@@ -30,6 +30,24 @@ class DenseLayer(object):
         
         weights = thr.array(self.shape, dtype=numpy.float32)
         bias = thr.array(output_shape, dtype=numpy.float32)       
+         
+        self.weights = weights
+        self.bias = bias
+    
+class DenseLayer(object):
+    
+    def __init__(self, context, input_shape, num_units=128, **kwargs):
+        log.info("DenseLayer constructor")
+        self.context = context
+        thr = context.thread
+        
+        self.output_shape = (num_units,)
+        if not isinstance(input_shape, tuple):
+            input_shape = (input_shape,)
+        weights_shape = input_shape + self.output_shape 
+        
+        weights = thr.array(weights_shape, dtype=numpy.float32)
+        bias = thr.array((num_units,), dtype=numpy.float32)       
          
         self.weights = weights
         self.bias = bias
@@ -55,7 +73,7 @@ class DenseLayer(object):
     def backpropagate(self, delta, weights, prev_delta):
         ctx = self.context
         ctx.dot(delta, weights, prev_delta, trans_b=True)
- 
+
 class FeedForwardNeuralNetwork(object):
     """
     A basic feed forward neural network.
@@ -75,19 +93,18 @@ class FeedForwardNeuralNetwork(object):
         self.weights = []
         self.layers = []
         
-    def add_layer(self, LayerClass, output_shape, **kwargs):
+    def add_layer(self, **kwargs):
         """
         Add a layer to the neural network.
         """
         ctx = self.context
-        if not isinstance(output_shape, tuple):
-            output_shape = (output_shape,)
-        input_shape = self.shape[-1]   
-        
-        new_layer = LayerClass(ctx, input_shape, output_shape)        
+        log.info(self.shape)
+        input_shape = self.shape[-1] 
+        LayerClass = kwargs['LayerClass']          
+        new_layer = LayerClass(ctx, input_shape, **kwargs)        
         self.layers.append(new_layer)
              
-        self.shape += (output_shape,)
+        self.shape += new_layer.output_shape
 
         # save additional references to the layers' weights
         self.weights.append((new_layer.weights, new_layer.bias))  
@@ -189,8 +206,8 @@ class NetworkState(object):
         # be given as the inputs array.
         # the first element is reserved for the inputs.  
         self.activations = [None]      
-        for shape in net.shape[1:]:
-            activation_shape = (self.size,) + shape
+        for layer in net.layers:
+            activation_shape = (self.size,) + layer.output_shape
             act = thread.array(activation_shape, numpy.float32)
             self.activations.append(act)
         

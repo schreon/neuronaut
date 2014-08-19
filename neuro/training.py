@@ -22,7 +22,7 @@ class TestState(object):
         
         # only the deltas of the output layer are necessary
         # for testing purposes
-        deltas_shape = (self.size,) + net.shape[-1]
+        deltas_shape = (self.size,) + net.layers[-1].output_shape
         deltas = thread.array(deltas_shape, numpy.float32)
         self.deltas = [deltas]
         
@@ -44,8 +44,8 @@ class TrainingState(object):
         # arrays for the deltas are necessary for all layers
         # except the input layer        
         self.deltas = []
-        for shape in net.shape[1:]:
-            deltas_shape = (self.size,) + shape
+        for layer in net.layers:
+            deltas_shape = (self.size,) + layer.output_shape
             deltas = thread.array(deltas_shape, numpy.float32)
             self.deltas.append(deltas)
         
