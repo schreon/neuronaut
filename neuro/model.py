@@ -3,9 +3,26 @@ import numpy
 
 log = logging.getLogger("model")
 
+class LogisticLayer(object):
+    def __init__(self, context, input_shape, output_shape):
+        log.info("LogisticLayer constructor")
+        super(LogisticLayer, self).__init__(context, input_shape, output_shape)
+        
+        self.transfer_function = context.logistic
+        self.transfer_derivative = context.logistic_derivative
+
+class LinearLayer(object):
+    def __init__(self, context, input_shape, output_shape):
+        log.info("LinearLayer constructor")
+        super(LinearLayer, self).__init__(context, input_shape, output_shape)
+        
+        self.transfer_function = context.linear
+        self.transfer_derivative = context.linear_derivative
+    
 class DenseLayer(object):
     
-    def __init__(self, context, input_shape, output_shape, transfer_function, transfer_derivative):
+    def __init__(self, context, input_shape, output_shape):
+        log.info("DenseLayer constructor")
         self.context = context
         thr = context.thread
         
@@ -16,8 +33,7 @@ class DenseLayer(object):
          
         self.weights = weights
         self.bias = bias
-        self.transfer_function = transfer_function
-        self.transfer_derivative = transfer_derivative
+
         
     def propagate(self, activations, next_activations):
         self.context.dot(activations, self.weights, next_activations)
@@ -59,17 +75,16 @@ class FeedForwardNeuralNetwork(object):
         self.weights = []
         self.layers = []
         
-    def add_layer(self, LayerClass, output_shape, transfer_function, transfer_derivative, **kwargs):
+    def add_layer(self, LayerClass, output_shape, **kwargs):
         """
         Add a layer to the neural network.
-        This creates weight and bias matrices.
         """
         ctx = self.context
         if not isinstance(output_shape, tuple):
             output_shape = (output_shape,)
         input_shape = self.shape[-1]   
         
-        new_layer = LayerClass(ctx, input_shape, output_shape, transfer_function, transfer_derivative)        
+        new_layer = LayerClass(ctx, input_shape, output_shape)        
         self.layers.append(new_layer)
              
         self.shape += (output_shape,)

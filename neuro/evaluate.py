@@ -29,7 +29,7 @@ class ConfigurationEvaluator():
         network = self.NetworkClass(input_shape=self.data_train[0].shape[1], **self.network_args)
         # skip the first entry because its the input layer        
         for options in self.network_structure[1:]:
-            network.add_layer(options['LayerClass'], options['num_units'], options['function'], options['derivative'])
+            network.add_layer(options['LayerClass'], options['num_units'])
         network.reset_weights(std=0.01)
         
         # upload data
