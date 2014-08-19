@@ -46,3 +46,19 @@ class BaseContext(KernelContext):
             return (thread.to_device(arr) for arr in arrays)
         else:          
             return thread.to_device(array)
+
+shape_cache = {}
+def reshape(array, shape):
+    '''
+    Reshape function. Caches array objects so one shape only gets created once.
+    :param array:
+    :param shape:
+    '''
+    
+    if array.shape != shape:
+        key = (array.gpudata, shape)
+        if not shape_cache.has_key(key):
+            shape_cache[key] = array.reshape(shape)
+        return shape_cache[key]
+    else:
+        return array

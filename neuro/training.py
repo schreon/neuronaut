@@ -121,7 +121,7 @@ class FullBatchTrainer(object):
             # Training Step
             self.train_step(training_state, inputs, targets, **kwargs)
             
-            if self.steps % self.validation_frequency == 0:
+            if test_state is not None and self.steps % self.validation_frequency == 0:
                 mse_test = network.mse(inputs_test, targets_test, test_state)
                 self.errors['current']['test'] =  numpy.sqrt(mse_test)
                 self.errors['history']['test'].append(self.errors['current']['test'])
@@ -159,8 +159,8 @@ class SGDState(object):
         net = kwargs['network']
         
         self.indices = thread.array((self.size,), dtype=numpy.int32)
-        self.inputs = thread.array((self.size, net.weights[0][0].shape[0]), dtype=numpy.float32)
-        self.targets = thread.array((self.size, net.weights[-1][0].shape[1]), dtype=numpy.float32)
+        self.inputs = thread.array((self.size,)+net.layers[0].input_shape, dtype=numpy.float32)
+        self.targets = thread.array((self.size,)+net.layers[-1].output_shape, dtype=numpy.float32)
         
 class SGDTrainer(FullBatchTrainer):
     '''

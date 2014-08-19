@@ -324,13 +324,17 @@ class KernelContext(object):
                 ],
                 """
             SIZE_T idx = ${indices.load_idx}(${idxs[0]});
-            %if dimensions > 1:
+            %if dimensions == 2:
             ${minibatch.store_same}(${array.load_idx}(idx, ${idxs[1]}));
+            %elif dimensions == 3:
+            ${minibatch.store_same}(${array.load_idx}(idx, ${idxs[1]}, ${idxs[2]}));
             %else:
             ${minibatch.store_same}(${array.load_idx}(idx));        
             %endif           
             """, guiding_array='minibatch', render_kwds=dict(dimensions=dimensions))
-            
+            log.info(array.shape)
+            log.info(indices.shape)
+            log.info(minibatch.shape)
             kernel_cache[key] = kernel.compile(thread)
     
         kernel_cache[key](array, indices, minibatch)

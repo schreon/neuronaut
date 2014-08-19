@@ -1,39 +1,27 @@
 import logging
+from neuro import reshape
+
 import numpy
+
 
 log = logging.getLogger("model")
 
 class LogisticLayer(object):
-    def __init__(self, context, input_shape, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         log.info("LogisticLayer constructor")
-        super(LogisticLayer, self).__init__(context, input_shape, **kwargs)
+        super(LogisticLayer, self).__init__(context, *args, **kwargs)
         
         self.transfer_function = context.logistic
         self.transfer_derivative = context.logistic_derivative
 
 class LinearLayer(object):
-    def __init__(self, context, input_shape, **kwargs):
+    def __init__(self, context, *args, **kwargs):
         log.info("LinearLayer constructor")
-        super(LinearLayer, self).__init__(context, input_shape, **kwargs)
+        super(LinearLayer, self).__init__(context, *args, **kwargs)
         
         self.transfer_function = context.linear
         self.transfer_derivative = context.linear_derivative
 
-class Convolution2DLayer(object):
-    
-    def __init__(self, context, input_shape, output_shape, filter_size=3):
-        log.info("ConvolutionLayer constructor")
-        self.context = context
-        thr = context.thread
-        
-        self.shape = input_shape + output_shape
-        
-        weights = thr.array(self.shape, dtype=numpy.float32)
-        bias = thr.array(output_shape, dtype=numpy.float32)       
-         
-        self.weights = weights
-        self.bias = bias
-    
 class DenseLayer(object):
     
     def __init__(self, context, input_shape, num_units=128, **kwargs):
@@ -41,9 +29,18 @@ class DenseLayer(object):
         self.context = context
         thr = context.thread
         
-        self.output_shape = (num_units,)
+        
         if not isinstance(input_shape, tuple):
             input_shape = (input_shape,)
+        if len(input_shape) > 1:
+            d = 1
+            for dim in input_shape:
+                d *= dim
+            input_shape = (d,)
+        
+        self.input_shape = input_shape
+        self.output_shape = (num_units,)
+        
         weights_shape = input_shape + self.output_shape 
         
         weights = thr.array(weights_shape, dtype=numpy.float32)
@@ -52,17 +49,26 @@ class DenseLayer(object):
         self.weights = weights
         self.bias = bias
 
-        
     def propagate(self, activations, next_activations):
+        desired_shape = activations.shape[:1] + self.input_shape
+        activations = reshape(activations, desired_shape)
         self.context.dot(activations, self.weights, next_activations)
     
     def transfer(self, activations):
+        desired_shape = activations.shape[:1] + self.output_shape
+        activations = reshape(activations, desired_shape)        
         self.transfer_function(activations, self.bias)
 
     def derivative(self, activations, delta):
+        desired_shape = activations.shape[:1] + self.output_shape
+        activations = reshape(activations, desired_shape)
+        delta = reshape(delta, desired_shape)
         self.transfer_derivative(activations, delta)
     
-    def calculate_gradient(self, prev_activations, delta, gradient_weights, gradient_bias):   
+    def calculate_gradient(self, prev_activations, delta, gradient_weights, gradient_bias): 
+        desired_shape = prev_activations.shape[:1] + self.input_shape
+        prev_activations = reshape(prev_activations, desired_shape)
+          
         ctx = self.context
         # calculate the gradients        
         ctx.dot(prev_activations, delta, gradient_weights, trans_a=True)         
@@ -71,6 +77,8 @@ class DenseLayer(object):
         ctx.sum(delta, gradient_bias, axis=0)
     
     def backpropagate(self, delta, weights, prev_delta):
+        desired_shape = prev_delta.shape[:1] + self.input_shape
+        prev_delta = reshape(prev_delta, desired_shape)
         ctx = self.context
         ctx.dot(delta, weights, prev_delta, trans_b=True)
 
@@ -104,7 +112,7 @@ class FeedForwardNeuralNetwork(object):
         new_layer = LayerClass(ctx, input_shape, **kwargs)        
         self.layers.append(new_layer)
              
-        self.shape += new_layer.output_shape
+        self.shape += (new_layer.output_shape,)
 
         # save additional references to the layers' weights
         self.weights.append((new_layer.weights, new_layer.bias))  
@@ -127,7 +135,6 @@ class FeedForwardNeuralNetwork(object):
             layer = self.layers[i]      
                     
             layer.propagate(activations[i], activations[i+1])       
-            #ctx.dot(activations[i], weights, activations[i+1])
             
             self.before_activation(i+1, state, **kwargs)
             layer.transfer(activations[i+1])
