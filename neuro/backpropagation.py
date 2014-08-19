@@ -17,11 +17,8 @@ class Backpropagation(object):
         :param targets: target values
         :param state: network state
         '''
-        ctx = self.context
         net = self.network
-        
-        derivatives = net.derivatives
-        
+                
         deltas = state.deltas
         activations = state.activations
         gradients = state.gradients
@@ -31,8 +28,8 @@ class Backpropagation(object):
         
         # start at the output layer, end at the input layer
         for i in range(1, len(activations)):
-            # get the derivative function of this layer
-            derivative = derivatives[-i]
+            # get the current layer   
+            layer = net.layers[-i]                     
             # get the activations of this layer
             this_activations = activations[-i]
             # get the activations of the previous layer
@@ -45,15 +42,11 @@ class Backpropagation(object):
             # apply the derivative to the activations
             # attention: activations contain f(x), not x!
             # so the derivative implementation must consider this.
-            derivative(this_activations, delta)
+            layer.derivative(this_activations, delta)
             
-            # calculate the gradients        
-            ctx.dot(prev_activations, delta, gradient_weights, trans_a=True)
-            
-            # bias gradient is just the sum of the deltas
-            # (because bias activation is implicitly 1.0)
-            ctx.sum(delta, gradient_bias, axis=0)
-                        
+            # calculate the gradient
+            layer.calculate_gradient(prev_activations, delta, gradient_weights, gradient_bias)
+     
             # backpropagate deltas to the previous layer
             # this is not necessary for the input layer
             if i < len(activations)-1:    
@@ -61,5 +54,6 @@ class Backpropagation(object):
                 prev_delta = deltas[-i-1]
                 # get the weights of this layer                
                 weights, _ = net.weights[-i]
-                # backpropagate the error through the weights                
-                ctx.dot(delta, weights, prev_delta, trans_b=True)
+                
+                # backpropagate the error through the weights        
+                layer.backpropagate(delta, weights, prev_delta)                

@@ -2,7 +2,44 @@ import logging
 import numpy
 
 log = logging.getLogger("model")
+
+class DenseLayer(object):
     
+    def __init__(self, context, input_shape, output_shape, transfer_function, transfer_derivative):
+        self.context = context
+        thr = context.thread
+        
+        self.shape = input_shape + output_shape
+        
+        weights = thr.array(self.shape, dtype=numpy.float32)
+        bias = thr.array(output_shape, dtype=numpy.float32)       
+         
+        self.weights = weights
+        self.bias = bias
+        self.transfer_function = transfer_function
+        self.transfer_derivative = transfer_derivative
+        
+    def propagate(self, activations, next_activations):
+        self.context.dot(activations, self.weights, next_activations)
+    
+    def transfer(self, activations):
+        self.transfer_function(activations, self.bias)
+
+    def derivative(self, activations, delta):
+        self.transfer_derivative(activations, delta)
+    
+    def calculate_gradient(self, prev_activations, delta, gradient_weights, gradient_bias):   
+        ctx = self.context
+        # calculate the gradients        
+        ctx.dot(prev_activations, delta, gradient_weights, trans_a=True)         
+        # bias gradient is just the sum of the deltas
+        # (because bias activation is implicitly 1.0)
+        ctx.sum(delta, gradient_bias, axis=0)
+    
+    def backpropagate(self, delta, weights, prev_delta):
+        ctx = self.context
+        ctx.dot(delta, weights, prev_delta, trans_b=True)
+ 
 class FeedForwardNeuralNetwork(object):
     """
     A basic feed forward neural network.
@@ -20,25 +57,25 @@ class FeedForwardNeuralNetwork(object):
             input_shape = (input_shape,)
         self.shape = (( input_shape,))      
         self.weights = []
-        self.functions = []
-        self.derivatives = []
+        self.layers = []
         
-    def add_layer(self, output_shape, transfer_function, transfer_derivative, **kwargs):
+    def add_layer(self, LayerClass, output_shape, transfer_function, transfer_derivative, **kwargs):
         """
         Add a layer to the neural network.
         This creates weight and bias matrices.
         """
+        ctx = self.context
         if not isinstance(output_shape, tuple):
             output_shape = (output_shape,)
-        input_shape = self.shape[-1]        
+        input_shape = self.shape[-1]   
+        
+        new_layer = LayerClass(ctx, input_shape, output_shape, transfer_function, transfer_derivative)        
+        self.layers.append(new_layer)
+             
         self.shape += (output_shape,)
-        weight_shape = input_shape + output_shape      
-        thr = self.context.thread        
-        weights = thr.array(weight_shape, dtype=numpy.float32)
-        bias = thr.array(output_shape, dtype=numpy.float32)        
-        self.weights.append((weights, bias))
-        self.functions.append(transfer_function)
-        self.derivatives.append(transfer_derivative)
+
+        # save additional references to the layers' weights
+        self.weights.append((new_layer.weights, new_layer.bias))  
 
     def propagate(self, state, inputs, **kwargs):
         '''
@@ -47,21 +84,21 @@ class FeedForwardNeuralNetwork(object):
         :param inputs: The input patterns.
         '''
         
-        ctx = self.context
         # replace the first element with the new inputs
         state.activations[0] = inputs
         activations = state.activations 
-        functions = self.functions
         
         for i in range(len(activations)-1):
             self.before_propagation(i, state, **kwargs)
             
-        for i in range(len(activations)-1):            
-            weights, bias = self.weights[i]            
-            ctx.dot(activations[i], weights, activations[i+1])
+        for i in range(len(activations)-1):
+            layer = self.layers[i]      
+                    
+            layer.propagate(activations[i], activations[i+1])       
+            #ctx.dot(activations[i], weights, activations[i+1])
             
             self.before_activation(i+1, state, **kwargs)
-            functions[i](activations[i+1], bias)
+            layer.transfer(activations[i+1])
             self.after_activation(i+1, state, **kwargs)
             
         for i in range(len(activations)-1):
