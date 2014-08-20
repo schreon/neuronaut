@@ -7,6 +7,11 @@ log = logging.getLogger("classification")
 
 
 def classification_delta_kernel(ctx, inputs, targets, deltas):
+
+    # each thread reads the class integer from targets
+    # each thread compares the class integer with its index
+    # if its equal, delta = 1.0 - output
+    # if its not equal, delta = -output
     pass
 
 class Classification(object):
