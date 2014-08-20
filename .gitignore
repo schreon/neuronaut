@@ -53,3 +53,4 @@ test/data/*
 # tests are in an own repo
 neuronaut-tests
 
+.idea
