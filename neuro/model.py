@@ -49,6 +49,8 @@ class DenseLayer(object):
         self.weights = weights
         self.bias = bias
 
+        self.targets_shape = self.output_shape
+
     def propagate(self, activations, next_activations):
         desired_shape = activations.shape[:1] + self.input_shape
         activations = reshape(activations, desired_shape)
@@ -100,7 +102,9 @@ class FeedForwardNeuralNetwork(object):
         self.shape = (( input_shape,))      
         self.weights = []
         self.layers = []
-        
+        self.targets_dtype= numpy.float32
+        self.error_measure = "RMSE"
+
     def add_layer(self, **kwargs):
         """
         Add a layer to the neural network.
@@ -115,7 +119,8 @@ class FeedForwardNeuralNetwork(object):
         self.shape += (new_layer.output_shape,)
 
         # save additional references to the layers' weights
-        self.weights.append((new_layer.weights, new_layer.bias))  
+        self.weights.append((new_layer.weights, new_layer.bias))
+
 
     def propagate(self, state, inputs, **kwargs):
         '''
@@ -151,14 +156,14 @@ class FeedForwardNeuralNetwork(object):
         :param targets: The desired target values.
         '''
 
-    def mse(self, inputs, targets, state):   
+    def error(self, inputs, targets, state):
         """
         Calculate the mean squared error on the given inputs/targets pairs
         """
         self.propagate(state, inputs)
         self.delta(state, targets)  
-        self.context.norm(state.deltas[-1], state.error, 2.0)                         
-        return state.error.get()[0]**2 / state.size
+        self.context.norm(state.deltas[-1], state.error, 2.0)
+        return numpy.sqrt(state.error.get()[0]**2 / state.size)
 
     def reset_weights(self, std=0.01):
         '''
@@ -205,7 +210,7 @@ class NetworkState(object):
         log.info("NetworkState constructor")        
         net = kwargs['network']
         self.size = kwargs['size']
-        
+
         thread = net.context.thread
         
         # create activation arrays.

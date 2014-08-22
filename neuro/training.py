@@ -26,8 +26,8 @@ class TestState(object):
         deltas = thread.array(deltas_shape, numpy.float32)
         self.deltas = [deltas]
         
-        # in this array, the current error (e.g. MSE) will be stored
-        self.error = thread.array((1,), dtype=numpy.float32)
+        # in this array, the current error (for example MSE) will be stored
+        self.error = thread.array((1,), dtype=net.targets_dtype)
 
 class TrainingState(object):
     '''
@@ -57,7 +57,7 @@ class TrainingState(object):
             self.gradients.append((gradients, gradients_bias))
         
         # in this array, the current error (e.g. MSE) will be stored    
-        self.error = thread.array((1,), dtype=numpy.float32)
+        self.error = thread.array((1,), dtype=net.targets_dtype)
 
 class FullBatchTrainer(object):
     '''
@@ -122,13 +122,13 @@ class FullBatchTrainer(object):
             self.train_step(training_state, inputs, targets, **kwargs)
             
             if test_state is not None and self.steps % self.validation_frequency == 0:
-                mse_test = network.mse(inputs_test, targets_test, test_state)
-                self.errors['current']['test'] =  numpy.sqrt(mse_test)
+                error_test = network.error(inputs_test, targets_test, test_state)
+                self.errors['current']['test'] =  error_test
                 self.errors['history']['test'].append(self.errors['current']['test'])
                 
                 if self.validate_train:
-                    mse_train = network.mse(inputs, targets, training_state)
-                    self.errors['current']['train'] =  numpy.sqrt(mse_train)
+                    error_train = network.error(inputs, targets, training_state)
+                    self.errors['current']['train'] =  error_train
                     self.errors['history']['train'].append(self.errors['current']['train'])
             self.steps += 1
             
@@ -136,7 +136,7 @@ class FullBatchTrainer(object):
             current_time = time.time()
             self.steps_per_sec = (self.steps-warm_up) / (current_time - start_time)
             if current_time > next_update:                  
-                log.info("(%d)RMSE: best %.4f, current %.4f, train %.4f, %.2f steps / sec" % (self.steps, self.errors['best']['test'], self.errors['current']['test'], self.errors['current']['train'], self.steps_per_sec))
+                log.info("(%d)%s: best %.4f, current %.4f, train %.4f, %.2f steps / sec" % (self.steps, network.error_measure, self.errors['best']['test'], self.errors['current']['test'], self.errors['current']['train'], self.steps_per_sec))
                 next_update += self.logging_frequency
 
 
@@ -160,7 +160,7 @@ class SGDState(object):
         
         self.indices = thread.array((self.size,), dtype=numpy.int32)
         self.inputs = thread.array((self.size,)+net.layers[0].input_shape, dtype=numpy.float32)
-        self.targets = thread.array((self.size,)+net.layers[-1].output_shape, dtype=numpy.float32)
+        self.targets = thread.array((self.size,)+net.layers[-1].targets_shape, dtype=net.targets_dtype)
         
 class SGDTrainer(FullBatchTrainer):
     '''
@@ -182,9 +182,3 @@ class SGDTrainer(FullBatchTrainer):
         super(SGDTrainer, self).__init__(*args, **kwargs)        
         self.minibatch_size = kwargs.get('minibatch_size', 128)        
         self.TrainingState = neuro.create("TrainingState", self.TrainingState, SGDState)
-    
-                
-
-        
-
-                    

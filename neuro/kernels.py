@@ -290,12 +290,12 @@ class KernelContext(object):
            
         if axis is not None and type(axis) is not tuple:
             axis = (axis,)
-    
+
         key = (self.sum, array.shape, array.dtype, axis, thread)
         if not key in kernel_cache.keys():
+            assert array.dtype == target.dtype
             log.info("compiling " + str(key))
-            expected_shape = tuple([array.shape[i] for i in range(len(array.shape)) if i not in axis])
-            assert target.shape == expected_shape
+            log.info(array.shape)
             rd = Reduce(array, predicate_sum(array.dtype),
                         axes=axis if axis is not None else None)
             kernel_cache[key] = rd.compile(thread)

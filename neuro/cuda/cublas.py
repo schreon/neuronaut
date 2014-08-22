@@ -69,7 +69,6 @@ _cublasSgemm.argtypes = [c_char, c_char, c_int, c_int, c_int,
                          c_float, POINTER(c_float), c_int,
                          POINTER(c_float), c_int, c_float,
                          POINTER(c_float), c_int]
-
 # cublasSgemm
 def cublasSgemm(transa, transb, m, n, k, alpha, A,
                 lda, B, ldb, beta, C, ldc):

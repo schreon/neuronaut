@@ -54,7 +54,6 @@ def reshape(array, shape):
     :param array:
     :param shape:
     '''
-    
     if array.shape != shape:
         key = (array.gpudata, shape)
         if not shape_cache.has_key(key):

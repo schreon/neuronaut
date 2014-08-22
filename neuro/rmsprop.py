@@ -98,7 +98,7 @@ class RMSPropState(object):
             sgw = ctx.thread.empty_like(gw)
             sgb = ctx.thread.empty_like(gb)
             self.squared_gradients.append((sgw, sgb))
-            
+
             sgw.fill(numpy.float32(1.0))
             sgb.fill(numpy.float32(1.0))
             
