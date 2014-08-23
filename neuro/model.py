@@ -51,23 +51,34 @@ class DenseLayer(object):
 
         self.targets_shape = self.output_shape
 
-    def propagate(self, activations, next_activations):
+    def propagate(self, state, idx):
+        activations = state.activations[idx]
+        next_activations = state.activations[idx+1]
+
         desired_shape = activations.shape[:1] + self.input_shape
         activations = reshape(activations, desired_shape)
         self.context.dot(activations, self.weights, next_activations)
     
-    def transfer(self, activations):
+    def transfer(self, state, idx):
+        activations = state.activations[idx]
         desired_shape = activations.shape[:1] + self.output_shape
         activations = reshape(activations, desired_shape)        
         self.transfer_function(activations, self.bias)
 
-    def derivative(self, activations, delta):
+    def derivative(self, state, idx):
+        activations = state.activations[idx]
+        delta = state.deltas[idx]
+
         desired_shape = activations.shape[:1] + self.output_shape
         activations = reshape(activations, desired_shape)
         delta = reshape(delta, desired_shape)
         self.transfer_derivative(activations, delta)
     
-    def calculate_gradient(self, prev_activations, delta, gradient_weights, gradient_bias): 
+    def calculate_gradient(self, state, idx):
+        prev_activations = state.activations[idx-1]
+        delta = state.deltas[idx]
+        gradient_weights, gradient_bias = state.gradients[idx]
+
         desired_shape = prev_activations.shape[:1] + self.input_shape
         prev_activations = reshape(prev_activations, desired_shape)
           
@@ -78,7 +89,13 @@ class DenseLayer(object):
         # (because bias activation is implicitly 1.0)
         ctx.sum(delta, gradient_bias, axis=0)
     
-    def backpropagate(self, delta, weights, prev_delta):
+    def backpropagate(self, state, idx):
+        delta = state.deltas[idx]
+        # get the deltas of the previous layer
+        prev_delta = state.deltas[idx-1]
+
+        weights = self.weights
+
         desired_shape = prev_delta.shape[:1] + self.input_shape
         prev_delta = reshape(prev_delta, desired_shape)
         ctx = self.context
@@ -139,10 +156,10 @@ class FeedForwardNeuralNetwork(object):
         for i in range(len(activations)-1):
             layer = self.layers[i]      
                     
-            layer.propagate(activations[i], activations[i+1])       
+            layer.propagate(state, i)
             
             self.before_activation(i+1, state, **kwargs)
-            layer.transfer(activations[i+1])
+            layer.transfer(state, i+1)
             self.after_activation(i+1, state, **kwargs)
             
         for i in range(len(activations)-1):

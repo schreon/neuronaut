@@ -278,18 +278,15 @@ def convolve2d_gradient(ctx, prev_deltas, deltas, gradient_intermediate):
         const SIZE_T fy = ${idxs[6]};
 
 
-        // weight gradient at the position fx, fy
-        // is defined by the sum
-        // (deltas * prev_deltas[fx:d_width+fx, fy:fy+d_height]).sum()
-        // alternatively we can store all delta positions
-        // and sum in a separate kernel - this is what we do now.
+        // weight gradient at the weight position fx, fy is defined by the sum
+        //
+        //       (deltas * prev_deltas[fx:d_width+fx, fy:fy+d_height]).sum()
+        //
+        // alternatively we can store all delta positions and sum in a separate kernel - this is what we do now.
 
-        float d = ${deltas.load_idx}(number, filter, dx, dy);
-        float pd = ${prev_deltas.load_idx}(number, channel, dx+fx, dy+fy);
+        float g = ${deltas.load_idx}(number, filter, dx, dy) * ${prev_deltas.load_idx}(number, channel, dx+fx, dy+fy);
 
-        d = d*pd;
-
-        ${gradient_intermediate.store_same}(d);
+        ${gradient_intermediate.store_same}(g);
 
         """, guiding_array='gradient_intermediate', render_kwds=render_kwds)
 
