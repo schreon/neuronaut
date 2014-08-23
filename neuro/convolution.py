@@ -76,13 +76,12 @@ def get_output_shape(array1, array2, mode):
         output_shape = (n, channels, filters, out_0, out_1)
 
     if mode == 'gradient':
-        n_1, channels, width, height = array1.shape # prev_deltas
-        n, filters, f_width, f_height = array2.shape # deltas
+        n_1, channels, p_width, p_height = array1.shape # prev_deltas
+        n, filters, d_width, d_height = array2.shape # deltas
         assert n_1 == n
-
-        out_0 = width - f_width + 1
-        out_1 = height - f_height + 1
-        output_shape = (n, channels, filters, out_0, out_1)
+        out_0 = p_width - d_width + 1
+        out_1 = p_height - d_height + 1
+        output_shape = (n, d_width, d_height, channels, filters, out_0, out_1)
 
     if output_shape is None:
         raise Exception("Invalid mode:", str(mode))
@@ -90,73 +89,11 @@ def get_output_shape(array1, array2, mode):
     return output_shape
 
 
-def convolve2d_full(ctx, array, weights, dest):
-    """ The output is the full discrete linear convolution of the inputs. """
-    kernel_cache, thread = ctx.kernel_cache, ctx.thread
-
-    key = (convolve2d_full, array.shape, weights.shape, thread)
-    if not key in kernel_cache.keys():
-        logging.info("compiling " + str(key))
-
-        channels, filters, owidth, oheight = weights.shape[0], weights.shape[1], dest.shape[1], dest.shape[2]
-
-        render_kwds = {
-            'w0': weights.shape[2],
-            'w1': weights.shape[3],
-            'a0': array.shape[2],
-            'a1': array.shape[3]
-        }
-
-        kernel_conv = PureParallel(
-            [
-                Parameter('array', Annotation(array, 'i')),
-                Parameter('weights', Annotation(weights, 'i')),
-                Parameter('dest', Annotation(dest, 'o'))
-            ],
-            """
-        // Array dimensions:
-        // array : (channels, width, height)
-        // weights: (channels, filters, fwidth, fheight)
-        // dest (filters, owidth, oheight)
-
-        float a = 0.0f;
-        SIZE_T x, y, i, j;
-        const SIZE_T number = ${idxs[0]};
-        const SIZE_T channel = ${idxs[1]};
-        const SIZE_T filter = ${idxs[2]};
-        const SIZE_T xout = ${idxs[3]};
-        const SIZE_T yout = ${idxs[4]};
-        for (i=0; i < ${w0}; i++){
-            for (j=0; j < ${w1}; j++){
-                x = xout - i;
-                if (x < 0) continue;
-                if (x >= ${a0}) continue;
-                y = yout - j;
-                if (y < 0) continue;
-                if (y >= ${a1}) continue;
-                a += ${array.load_idx}(number, channel, x,y) // filters, x, y
-                   * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
-            }
-        }
-
-        ${dest.store_same}(a);
-
-        """, guiding_array='dest', render_kwds=render_kwds)
-
-        kernel_cache[key] = kernel_conv.compile(
-            thread, fast_math=True)
-
-    # run convolution -> intermediate
-    kernel_cache[key](array, weights, dest)
-
-    return dest
-
-
-def convolve2d_valid(ctx, array, weights, dest):
+def convolve2d_propagation(ctx, array, weights, dest):
     """ The output is the valid discrete linear convolution of the inputs. """
     kernel_cache, thread = ctx.kernel_cache, ctx.thread
 
-    key = (convolve2d_valid, weights.shape, array.shape, thread)
+    key = (convolve2d_propagation, weights.shape, array.shape, thread)
     if not key in kernel_cache.keys():
         logging.info("compiling" + str(key))
 
@@ -211,142 +148,155 @@ def convolve2d_valid(ctx, array, weights, dest):
     return dest
 
 
-def convolve2d_same(ctx, array, weights, dest):
-    """ The output is the same size as array, centered with respect to the full output. """
+
+def convolve2d_backprop(ctx, deltas, weights, deltas_intermediate):
+    """ The output is the full discrete linear convolution of the inputs. """
     kernel_cache, thread = ctx.kernel_cache, ctx.thread
 
-    key = (convolve2d_same, array.shape, weights.shape, thread)
+    key = (convolve2d_backprop, deltas.shape, weights.shape, thread)
     if not key in kernel_cache.keys():
-        logging.info("compiling" + str(key))
+        logging.info("compiling " + str(key))
 
-        channels, filters, owidth, oheight = weights.shape[0], weights.shape[1], dest.shape[1], dest.shape[2]
+        # Extract shapes from the arrays
+        channels, filters, f_width, f_height = weights.shape
+        n_1, filters_1, d_width, d_height = deltas.shape
+        n, channels_1, filters_2, p_width, p_height = deltas_intermediate.shape
 
+        # Some assertions to be sure everything is correct
+        assert n_1 == n
+        assert filters_2 == filters_1 == filters
+        assert channels_1 == channels
+        expected_shape = get_output_shape(deltas, weights, 'backprop')
+        assert expected_shape == deltas_intermediate.shape
+
+        # Render keywords
         render_kwds = {
-            'w0': weights.shape[2],
-            'w1': weights.shape[3],
-            'a0': array.shape[2],
-            'a1': array.shape[3],
-            'off0': int(numpy.ceil(weights.shape[2] / 2.0) - 1),
-            'off1': int(numpy.ceil(weights.shape[3] / 2.0) - 1),
-            'c' : array.shape[1]
-        }
-
-        kernel_conv = PureParallel(
-            [
-                Parameter('array', Annotation(array, 'i')),
-                Parameter('weights', Annotation(weights, 'i')),
-                Parameter('dest', Annotation(dest, 'o'))
-            ],
-            """
-        // Array dimensions:
-        // array : (channels, width, height)
-        // weights: (channels, filters, fwidth, fheight)
-        // dest (channels, filters, owidth, oheight)
-
-        float a = 0.0f;
-        SIZE_T x, y, i, j;
-        const SIZE_T number = ${idxs[0]};
-        const SIZE_T channel = ${idxs[1]};
-        const SIZE_T filter = ${idxs[2]};
-        const SIZE_T xout = ${idxs[3]};
-        const SIZE_T yout = ${idxs[4]};
-        for (i=0; i < ${w0}; i++){
-            for (j=0; j < ${w1}; j++){
-                x = xout - i  + ${off0};
-                y = yout - j  + ${off1};
-                if (0 <= x && x < ${a0} && 0 <= y && y < ${a1}) {
-                    a += ${array.load_idx}(number, channel, x, y)
-                       * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
-                }
-            }
-        }
-
-        ${dest.store_same}(a);
-
-        """, guiding_array='dest', render_kwds=render_kwds)
-        kernel_cache[key] = kernel_conv.compile(
-            thread, fast_math=True)
-
-    # run convolution
-    kernel_cache[key](array, weights, dest)
-
-    return dest
-
-modes = {
-    'full': convolve2d_full,
-    'valid': convolve2d_valid,
-    'same': convolve2d_same
-}
-
-
-def convolve(thr, array, weights, dest, mode):
-    """ Convolve two arrays. Mimicks the behavior of scipy.signal.convolve2d """
-    if not mode in modes.keys():
-        raise Exception("invalid mode for convolve2d:" + str(mode))
-    else:
-        return modes[mode](thr, array, weights, dest)
-
-
-def convolve_backprop(ctx, deltas, weights, prev_deltas):
-    """ convolve the deltas over the inputs. similar to full convolution but without shared weights """
-    kernel_cache, thread = ctx.kernel_cache, ctx.thread
-
-    key = (convolve_backprop, deltas.shape, weights.shape, thread)
-    if not key in kernel_cache.keys():
-        # deltas = (n, channels, width, height)
-        # weights = (channels, filters, fwidth, fheight)
-        # prev_deltas = (channels, iwidth, iheight)
-
-        logging.info("compiling" + str(key))
-
-        (n, channels, width, height) = deltas.shape
-        (channels, filters, fwidth, fheight) = weights.shape
-
-
-        render_kwds = {
+            'n':n,
             'filters':filters,
             'channels': channels,
-            'width': width,
-            'height': height,
-            'fwidth': fwidth,
-            'fheight': fheight,
+            'f_width': f_width,
+            'f_height': f_height,
+            'd_width': d_width,
+            'd_height': d_height,
+            'p_width': p_width,
+            'p_height': p_height,
         }
 
-        kernel_conv = PureParallel(
+        # The kernel
+        kernel = PureParallel(
             [
                 Parameter('deltas', Annotation(deltas, 'i')),
                 Parameter('weights', Annotation(weights, 'i')),
-                Parameter('prev_deltas', Annotation(prev_deltas, 'o'))
+                Parameter('deltas_intermediate', Annotation(deltas_intermediate, 'o'))
             ],
             """
-        float a = 0.0f;
-        SIZE_T x, y, i, j;
+        float d = 0.0f;
+        SIZE_T x, y, i, j, fi, fj;
         const SIZE_T number = ${idxs[0]};
         const SIZE_T channel = ${idxs[1]};
         const SIZE_T filter = ${idxs[2]};
         const SIZE_T xout = ${idxs[3]};
         const SIZE_T yout = ${idxs[4]};
-        for (i=0; i < ${w0}; i++){
-            for (j=0; j < ${w1}; j++){
+        for (i=0; i < ${f_width}; i++){
+            for (j=0; j < ${f_height}; j++){
                 x = xout - i;
                 if (x < 0) continue;
-                if (x >= ${a0}) continue;
+                if (x >= ${d_width}) continue;
                 y = yout - j;
                 if (y < 0) continue;
-                if (y >= ${a1}) continue;
-                a += ${array.load_idx}(number, channel, x,y) // filters, x, y
-                   * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
+                if (y >= ${d_height}) continue;
+                // acces weights in flipped order!
+                fi = ${f_width} - i - 1;
+                fj = ${f_height} - j - 1;
+                d += ${deltas.load_idx}(number, channel, x, y)
+                   * ${weights.load_idx}(channel, filter, fi, fj);
             }
         }
 
-        ${dest.store_same}(a);
+        ${deltas_intermediate.store_same}(d);
 
-        """, guiding_array='dest', render_kwds=render_kwds)
+        """, guiding_array='deltas_intermediate', render_kwds=render_kwds)
 
-        kernel_cache[key] = kernel_conv.compile(
+        kernel_cache[key] = kernel.compile(
             thread, fast_math=True)
 
     # run convolution -> intermediate
-    kernel_cache[key](array, weights, dest)
+    kernel_cache[key](deltas, weights, deltas_intermediate)
 
-    return dest
+    return deltas_intermediate
+
+def convolve2d_gradient(ctx, prev_deltas, deltas, gradient_intermediate):
+    """ The output is the full discrete linear convolution of the inputs. """
+    kernel_cache, thread = ctx.kernel_cache, ctx.thread
+
+    key = (convolve2d_gradient, prev_deltas.shape, deltas.shape, thread)
+    if not key in kernel_cache.keys():
+        logging.info("compiling " + str(key))
+
+        # Extract shapes from the arrays
+        n, channels, p_width, p_height = prev_deltas.shape
+        n_1, filters, d_width, d_height = deltas.shape
+        n, d_width_1, d_height_1, channels_1, filters_1, f_width, f_height = gradient_intermediate.shape
+
+        # Some assertions to be sure everything is correct
+        assert n_1 == n
+        assert filters_1 == filters
+        assert channels_1 == channels
+        expected_shape = get_output_shape(prev_deltas, deltas, 'gradient')
+        assert expected_shape == gradient_intermediate.shape
+        assert d_width_1 == d_width
+        assert d_height_1 == d_height
+
+        # Render keywords
+        render_kwds = {
+            'n':n,
+            'filters':filters,
+            'channels': channels,
+            'f_width': f_width,
+            'f_height': f_height,
+            'd_width': d_width,
+            'd_height': d_height,
+            'p_width': p_width,
+            'p_height': p_height,
+        }
+
+        # The kernel
+        kernel = PureParallel(
+            [
+                Parameter('prev_deltas', Annotation(prev_deltas, 'i')),
+                Parameter('deltas', Annotation(deltas, 'i')),
+                Parameter('gradient_intermediate', Annotation(gradient_intermediate, 'o'))
+            ],
+            """
+
+        const SIZE_T number = ${idxs[0]};
+        const SIZE_T dx = ${idxs[1]};
+        const SIZE_T dy = ${idxs[2]};
+        const SIZE_T channel = ${idxs[3]};
+        const SIZE_T filter = ${idxs[4]};
+        const SIZE_T fx = ${idxs[5]};
+        const SIZE_T fy = ${idxs[6]};
+
+
+        // weight gradient at the position fx, fy
+        // is defined by the sum
+        // (deltas * prev_deltas[fx:d_width+fx, fy:fy+d_height]).sum()
+        // alternatively we can store all delta positions
+        // and sum in a separate kernel - this is what we do now.
+
+        float d = ${deltas.load_idx}(number, filter, dx, dy);
+        float pd = ${prev_deltas.load_idx}(number, channel, dx+fx, dy+fy);
+
+        d = d*pd;
+
+        ${gradient_intermediate.store_same}(d);
+
+        """, guiding_array='gradient_intermediate', render_kwds=render_kwds)
+
+        kernel_cache[key] = kernel.compile(
+            thread, fast_math=True)
+
+    # run convolution -> intermediate
+    kernel_cache[key](prev_deltas, deltas, gradient_intermediate)
+
+    return gradient_intermediate
