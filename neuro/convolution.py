@@ -33,7 +33,7 @@ class Convolution2DLayer(object):
         self.bias = bias
     
     def propagate(self, activations, next_activations):
-        # TODO: convolve
+        convolve(self.context, activations, self.weights, next_activations)
         pass
 
     def transfer(self, activations):
@@ -52,31 +52,40 @@ class Convolution2DLayer(object):
         # TODO: convolve weights over deltas
         pass
 
-def get_output_shape(array, weights, mode):
+def get_output_shape(array1, array2, mode):
     """ Returns the shape of the intermediate array and the expected output array for the given arrays and mode """
 
-    shape = None
-    if mode == 'full':
-        out_0 = array.shape[1] + weights.shape[2] - 1
-        out_1 = array.shape[2] + weights.shape[3] - 1
-        shape = (out_0, out_1)
+    output_shape = None
 
-    if mode == 'valid':
-        out_0 = array.shape[1] - weights.shape[2] + 1
-        out_1 = array.shape[2] - weights.shape[3] + 1
-        shape = (out_0, out_1)
+    if mode == 'propagation':
+        n, channels_1, width, height = array1.shape # inputs
+        channels, filters, f_width, f_height = array2.shape # weights
+        assert channels == channels_1
 
-    if mode == 'same':
-        out_0 = array.shape[1]
-        out_1 = array.shape[2]
-        shape = (out_0, out_1)
+        out_0 = width - f_width + 1
+        out_1 = height - f_height + 1
+        output_shape = (n, channels, filters, out_0, out_1)
 
-    if shape is None:
+    if mode == 'backprop':
+        n, filters_1, width, height = array1.shape # deltas
+        channels, filters, f_width, f_height = array2.shape # weights
+        assert filters_1 == filters
+
+        out_0 = width + f_width - 1
+        out_1 = height + f_height - 1
+        output_shape = (n, channels, filters, out_0, out_1)
+
+    if mode == 'gradient':
+        n_1, channels, width, height = array1.shape # prev_deltas
+        n, filters, f_width, f_height = array2.shape # deltas
+        assert n_1 == n
+
+        out_0 = width - f_width + 1
+        out_1 = height - f_height + 1
+        output_shape = (n, channels, filters, out_0, out_1)
+
+    if output_shape is None:
         raise Exception("Invalid mode:", str(mode))
-
-    (channels, filters, _, _,) = weights.shape
-
-    output_shape = (channels, filters, shape[0], shape[1])
 
     return output_shape
 
@@ -89,11 +98,13 @@ def convolve2d_full(ctx, array, weights, dest):
     if not key in kernel_cache.keys():
         logging.info("compiling " + str(key))
 
+        channels, filters, owidth, oheight = weights.shape[0], weights.shape[1], dest.shape[1], dest.shape[2]
+
         render_kwds = {
             'w0': weights.shape[2],
             'w1': weights.shape[3],
-            'a0': array.shape[1],
-            'a1': array.shape[2],
+            'a0': array.shape[2],
+            'a1': array.shape[3]
         }
 
         kernel_conv = PureParallel(
@@ -106,24 +117,32 @@ def convolve2d_full(ctx, array, weights, dest):
         // Array dimensions:
         // array : (channels, width, height)
         // weights: (channels, filters, fwidth, fheight)
-        // dest (channels, filters, owidth, oheight)
+        // dest (filters, owidth, oheight)
 
         float a = 0.0f;
         SIZE_T x, y, i, j;
-        SIZE_T channel = ${idxs[0]};
-        SIZE_T filter = ${idxs[1]};
+        const SIZE_T number = ${idxs[0]};
+        const SIZE_T channel = ${idxs[1]};
+        const SIZE_T filter = ${idxs[2]};
+        const SIZE_T xout = ${idxs[3]};
+        const SIZE_T yout = ${idxs[4]};
         for (i=0; i < ${w0}; i++){
             for (j=0; j < ${w1}; j++){
-                x = ${idxs[2]} - i;
-                y = ${idxs[3]} - j;
-                if (0 <= x && x < ${a0} && 0 <= y && y < ${a1}) {
-                    a += ${array.load_idx}(channel, x,y) // filters, x, y
-                       * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
-                }
+                x = xout - i;
+                if (x < 0) continue;
+                if (x >= ${a0}) continue;
+                y = yout - j;
+                if (y < 0) continue;
+                if (y >= ${a1}) continue;
+                a += ${array.load_idx}(number, channel, x,y) // filters, x, y
+                   * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
             }
         }
+
         ${dest.store_same}(a);
+
         """, guiding_array='dest', render_kwds=render_kwds)
+
         kernel_cache[key] = kernel_conv.compile(
             thread, fast_math=True)
 
@@ -141,13 +160,15 @@ def convolve2d_valid(ctx, array, weights, dest):
     if not key in kernel_cache.keys():
         logging.info("compiling" + str(key))
 
+        channels, filters, owidth, oheight = weights.shape[0], weights.shape[1], dest.shape[1], dest.shape[2]
+
         render_kwds = {
             'w0': weights.shape[2],
             'w1': weights.shape[3],
-            'a0': array.shape[1],
-            'a1': array.shape[2],
+            'a0': array.shape[2],
+            'a1': array.shape[3],
             'off0': int(weights.shape[2] - 1),
-            'off1': int(weights.shape[3] - 1),
+            'off1': int(weights.shape[3] - 1)
         }
 
         kernel_conv = PureParallel(
@@ -164,19 +185,22 @@ def convolve2d_valid(ctx, array, weights, dest):
 
         float a = 0.0f;
         SIZE_T x, y, i, j;
-        SIZE_T channel = ${idxs[0]};
-        SIZE_T filter = ${idxs[1]};
+        const SIZE_T number = ${idxs[0]};
+        const SIZE_T channel = ${idxs[1]};
+        const SIZE_T filter = ${idxs[2]};
+        const SIZE_T xout = ${idxs[3]};
+        const SIZE_T yout = ${idxs[4]};
         for (i=0; i < ${w0}; i++){
             for (j=0; j < ${w1}; j++){
-                x = ${idxs[2]} - i  + ${off0};
-                y = ${idxs[3]} - j  + ${off1};
-                if (0 <= x && x < ${a0} && 0 <= y && y < ${a1}) {
-                    a += ${array.load_idx}(channel, x,y) // channel, x, y
-                       * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
-                }
+                x = xout - i  + ${off0};
+                y = yout - j  + ${off1};
+                a += ${array.load_idx}(number, channel, x, y)
+                   * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
             }
         }
+
         ${dest.store_same}(a);
+
         """, guiding_array='dest', render_kwds=render_kwds)
         kernel_cache[key] = kernel_conv.compile(
             thread, fast_math=True)
@@ -195,13 +219,16 @@ def convolve2d_same(ctx, array, weights, dest):
     if not key in kernel_cache.keys():
         logging.info("compiling" + str(key))
 
+        channels, filters, owidth, oheight = weights.shape[0], weights.shape[1], dest.shape[1], dest.shape[2]
+
         render_kwds = {
             'w0': weights.shape[2],
             'w1': weights.shape[3],
-            'a0': array.shape[1],
-            'a1': array.shape[2],
+            'a0': array.shape[2],
+            'a1': array.shape[3],
             'off0': int(numpy.ceil(weights.shape[2] / 2.0) - 1),
             'off1': int(numpy.ceil(weights.shape[3] / 2.0) - 1),
+            'c' : array.shape[1]
         }
 
         kernel_conv = PureParallel(
@@ -218,19 +245,24 @@ def convolve2d_same(ctx, array, weights, dest):
 
         float a = 0.0f;
         SIZE_T x, y, i, j;
-        SIZE_T channel = ${idxs[0]};
-        SIZE_T filter = ${idxs[1]};
+        const SIZE_T number = ${idxs[0]};
+        const SIZE_T channel = ${idxs[1]};
+        const SIZE_T filter = ${idxs[2]};
+        const SIZE_T xout = ${idxs[3]};
+        const SIZE_T yout = ${idxs[4]};
         for (i=0; i < ${w0}; i++){
             for (j=0; j < ${w1}; j++){
-                x = ${idxs[2]} - i  + ${off0};
-                y = ${idxs[3]} - j  + ${off1};
+                x = xout - i  + ${off0};
+                y = yout - j  + ${off1};
                 if (0 <= x && x < ${a0} && 0 <= y && y < ${a1}) {
-                    a += ${array.load_idx}(channel, x,y) // channel, x, y
+                    a += ${array.load_idx}(number, channel, x, y)
                        * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
                 }
             }
         }
+
         ${dest.store_same}(a);
+
         """, guiding_array='dest', render_kwds=render_kwds)
         kernel_cache[key] = kernel_conv.compile(
             thread, fast_math=True)
@@ -253,3 +285,68 @@ def convolve(thr, array, weights, dest, mode):
         raise Exception("invalid mode for convolve2d:" + str(mode))
     else:
         return modes[mode](thr, array, weights, dest)
+
+
+def convolve_backprop(ctx, deltas, weights, prev_deltas):
+    """ convolve the deltas over the inputs. similar to full convolution but without shared weights """
+    kernel_cache, thread = ctx.kernel_cache, ctx.thread
+
+    key = (convolve_backprop, deltas.shape, weights.shape, thread)
+    if not key in kernel_cache.keys():
+        # deltas = (n, channels, width, height)
+        # weights = (channels, filters, fwidth, fheight)
+        # prev_deltas = (channels, iwidth, iheight)
+
+        logging.info("compiling" + str(key))
+
+        (n, channels, width, height) = deltas.shape
+        (channels, filters, fwidth, fheight) = weights.shape
+
+
+        render_kwds = {
+            'filters':filters,
+            'channels': channels,
+            'width': width,
+            'height': height,
+            'fwidth': fwidth,
+            'fheight': fheight,
+        }
+
+        kernel_conv = PureParallel(
+            [
+                Parameter('deltas', Annotation(deltas, 'i')),
+                Parameter('weights', Annotation(weights, 'i')),
+                Parameter('prev_deltas', Annotation(prev_deltas, 'o'))
+            ],
+            """
+        float a = 0.0f;
+        SIZE_T x, y, i, j;
+        const SIZE_T number = ${idxs[0]};
+        const SIZE_T channel = ${idxs[1]};
+        const SIZE_T filter = ${idxs[2]};
+        const SIZE_T xout = ${idxs[3]};
+        const SIZE_T yout = ${idxs[4]};
+        for (i=0; i < ${w0}; i++){
+            for (j=0; j < ${w1}; j++){
+                x = xout - i;
+                if (x < 0) continue;
+                if (x >= ${a0}) continue;
+                y = yout - j;
+                if (y < 0) continue;
+                if (y >= ${a1}) continue;
+                a += ${array.load_idx}(number, channel, x,y) // filters, x, y
+                   * ${weights.load_idx}(channel, filter, i, j); // channel, filter, i, j
+            }
+        }
+
+        ${dest.store_same}(a);
+
+        """, guiding_array='dest', render_kwds=render_kwds)
+
+        kernel_cache[key] = kernel_conv.compile(
+            thread, fast_math=True)
+
+    # run convolution -> intermediate
+    kernel_cache[key](array, weights, dest)
+
+    return dest
