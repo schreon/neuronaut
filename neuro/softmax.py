@@ -1,4 +1,5 @@
 import logging
+from neuro.logistic import logistic_derivative
 import numpy
 from reikna.algorithms import PureParallel
 from reikna.core import Parameter
@@ -55,7 +56,8 @@ class SoftmaxLayer(object):
         log.info("SoftmaxLayer constructor")
         super(SoftmaxLayer, self).__init__(context, *args, **kwargs)
 
-        self.transfer_derivative = context.logistic_derivative
+    def transfer(self, state):
+        softmax(self.context, state.activations, self.bias)
 
-    def transfer_function(self, *args, **kwargs):
-        softmax(self.context, *args, **kwargs)
+    def derivative(self, state):
+        logistic_derivative(self.context, state.activations, state.deltas)

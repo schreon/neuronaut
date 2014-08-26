@@ -131,31 +131,55 @@ class RMSProp(object):
           'squared_gradient_factor' : numpy.float32(kwargs.get('squared_gradient_factor', 0.9)),
           'min_root_squared_gradient' : numpy.float32(kwargs.get('min_root_squared_gradient', 0.000001)),
           'l1_decay' : numpy.float32(kwargs.get('l1_decay', 0.0)),
-          'l2_decay' : numpy.float32(kwargs.get('l2_decay', 0.0))
+          'l2_decay' : numpy.float32(kwargs.get('l2_decay', 0.0)),
+          'batch_size' : numpy.float32(self.get_batch_size())
         }
-        
-        
-        self.TrainingState = neuro.create("TrainingState", self.TrainingState, RMSPropState)
-        
-    def update_weights(self, state):
-        super(RMSProp, self).update_weights(state)
-        
-        net = self.network
+
+
+
+    def initialize_training_state(self, training_state, **kwargs):
+        super(RMSProp, self).initialize_training_state(training_state, **kwargs)
+
+        log.info("RMSProp create_training_state")
         ctx = self.context
-        
-        weights = net.weights
-        gradients = state.gradients
-        squared_gradients = state.squared_gradients
-        learn_rates = state.learn_rates
-        momentum = state.momentum
-        
-        self.parameters['batch_size'] = numpy.float32(state.size)
-        for i in range(len(gradients)):
-            w, b =  weights[i]
-            gw, gb = gradients[i]
-            sgw, sgb = squared_gradients[i]
-            mw, mb = momentum[i]
-            lrw, lrb = learn_rates[i]
-            
-            rms_update(ctx, w, gw, sgw, mw, lrw, self.parameters)
-            rms_update(ctx, b, gb, sgb, mb, lrb, self.parameters)
+        network = self.network
+
+        for layer, layer_state in zip(network.layers, training_state.layers):
+            sgw = ctx.thread.empty_like(layer.weights)
+            sgb = ctx.thread.empty_like(layer.bias)
+            layer_state.squared_gradients = (sgw, sgb)
+
+            sgw.fill(numpy.float32(1.0))
+            sgb.fill(numpy.float32(1.0))
+
+            mw = ctx.thread.empty_like(layer.weights)
+            mb = ctx.thread.empty_like(layer.bias)
+            layer_state.momentum = (mw, mb)
+
+            mw.fill(numpy.float32(0.0))
+            mb.fill(numpy.float32(0.0))
+
+            lrw = ctx.thread.empty_like(layer.weights)
+            lrb = ctx.thread.empty_like(layer.bias)
+            lrw.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
+            lrb.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
+
+            layer_state.learn_rates = (lrw, lrb)
+
+    def update_weights(self, training_state):
+        super(RMSProp, self).update_weights(training_state)
+
+        ctx = self.context
+        network = self.network
+
+        for layer, layer_state in zip(network.layers, training_state.layers):
+            weights = layer.weights
+            bias = layer.bias
+
+            gw, gb = layer_state.gradients, layer_state.gradients_bias
+            sgw, sgb = layer_state.squared_gradients
+            mw, mb = layer_state.momentum
+            lrw, lrb = layer_state.learn_rates
+
+            rms_update(ctx, weights, gw, sgw, mw, lrw, self.parameters)
+            rms_update(ctx, bias, gb, sgb, mb, lrb, self.parameters)

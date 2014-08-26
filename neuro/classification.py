@@ -103,58 +103,52 @@ def class_errors(ctx, expected, actual, errors):
 
     kernel_cache[key](expected, actual, errors)
 
-class Classification(object):
+class ClassificationNetwork(object):
     """
     Defines the ouput of a neural network to solve a regression task.
     """
 
     def __init__(self, **kwargs):        
-        super(Classification, self).__init__(**kwargs)
+        super(ClassificationNetwork, self).__init__(**kwargs)
         log.info("Classification constructor")
 
         self.targets_dtype = numpy.int32
         self.error_measure = "Classification Errors"
-    
-    def delta(self, state, targets):
+
+    def get_target_shape(self):
+        # in a classification network, the target values are just the index of the correct class
+        return ()
+
+    def get_target_dtype(self):
+        return numpy.int32
+
+    def delta(self, network_state, targets):
         """
         Classes must be coded as integers. Each integer is one class.
         """
-        super(Classification, self).delta(state, targets)
-        classification_delta_kernel(self.context, state.activations[-1], targets, state.deltas[-1])
+        super(ClassificationNetwork, self).delta(network_state, targets)
+        outputs = network_state.layers[-1].activations
+        deltas = network_state.layers[-1].deltas
+        classification_delta_kernel(self.context, outputs, targets, deltas)
 
-    def add_layer(self, **kwargs):
-        super(Classification, self).add_layer(**kwargs)
+    def add_layer(self, LayerClass,  **kwargs):
+        super(ClassificationNetwork, self).add_layer(LayerClass, **kwargs)
 
-        # in a classification network, the target values are just the index of the correct class
-        self.layers[-1].targets_shape = ()
-
-    def error(self, inputs, targets, state):
+    def error(self, inputs, targets, network_state):
         """
         Calculate the classification error.
         """
-        self.propagate(state, inputs)
-        class_errors(self.context, targets, state.activations[-1], state.classification_errors)
-        self.context.sum(state.classification_errors, state.error)
+        self.propagate(network_state, inputs)
+        outputs = network_state.layers[-1].activations
 
-        return state.error.get()
+        class_errors(self.context, targets, outputs, network_state.classification_errors)
+        self.context.sum(network_state.classification_errors, network_state.error)
 
-class ClassificationState(object):
-    '''
-    Holds the state belonging to classification networks.
-    '''
+        return network_state.error.get()
 
-    def __init__(self, **kwargs):
-        super(ClassificationState, self).__init__(**kwargs)
-        ctx = kwargs['network'].context
-
-        shp = (kwargs['size'],)
-        self.classification_errors = ctx.thread.array(shp, dtype=numpy.int32)
-        log.info(self.classification_errors.shape)
-
-class ClassificationTrainer(object):
-    def __init__(self, **kwargs):
-        super(ClassificationTrainer, self).__init__(**kwargs)
-        log.info("ClassificationTrainer constructor")
-
-        self.TrainingState = neuro.create("TrainingState", self.TrainingState, ClassificationState)
-        self.TestState = neuro.create("TestState", self.TestState, ClassificationState)
+    def create_state(self, num_patterns):
+        state = super(ClassificationNetwork, self).create_state(num_patterns)
+        ctx = self.context
+        shp = (num_patterns,)
+        state.classification_errors = ctx.thread.array(shp, dtype=numpy.int32)
+        return state

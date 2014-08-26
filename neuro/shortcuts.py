@@ -1,5 +1,5 @@
 import neuro
-from neuro.backpropagation import Backpropagation
+from neuro.backpropagation import BackpropagationTrainer
 from neuro.evaluate import ConfigurationEvaluator
 from neuro.model import FeedForwardNeuralNetwork, Regression, NaNMask
 from neuro.rprop import RPROP
@@ -47,7 +47,7 @@ class RegressionNetworkFactory(object):
         
         TrainerClass = neuro.create("MyTrainer", 
                                  FullBatchTrainer, 
-                                 Backpropagation, 
+                                 BackpropagationTrainer,
                                  EarlyStopping, 
                                  RPROP, 
                                  Renormalize

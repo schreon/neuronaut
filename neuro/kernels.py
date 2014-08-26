@@ -148,110 +148,8 @@ class KernelContext(object):
     
         # Run kernel
         kernel_cache[key](activations, delta, dest)
-    
-    def linear(self, activations, bias, dest=None):
-        kernel_cache, thread = self.kernel_cache, self.thread
-        
-        if dest is None:
-            dest = activations
-        
-        key = (self.linear, activations.shape, thread)
-        if not key in kernel_cache.keys():
-            log.info("compiling " + str(key))
-            assert activations.shape[1] == bias.shape[0]
-    
-            kernel = PureParallel(
-                [
-                    Parameter('activations', Annotation(activations, 'i')),
-                    Parameter('bias', Annotation(bias, 'i')),
-                    Parameter('dest', Annotation(dest, 'o')),
-                ],
-                """
-            ${activations.ctype} a = ${activations.load_same};
-            ${bias.ctype} b = ${bias.load_idx}(${idxs[1]});
-            
-            a += b;
-            
-            ${dest.store_same}(a);
-            """, guiding_array='activations')
-    
-            kernel_cache[key] = kernel.compile(thread, fast_math=True)
-    
-        # Run kernel
-        kernel_cache[key](activations, bias, dest)
-    
-        return dest
-    
-    def linear_derivative(self, activations, delta, dest=None):
-        # no need to do anything
-        return delta
-    
-    
-    def logistic(self, activations, bias, dest=None):
-        kernel_cache, thread = self.kernel_cache, self.thread
-        
-        if dest is None:
-            dest = activations
-        
-        key = (self.logistic, activations.shape, thread)
-        if not key in kernel_cache.keys():
-            log.info("compiling " + str(key))
-            assert activations.shape[1] == bias.shape[0]
-    
-            kernel = PureParallel(
-                [
-                    Parameter('activations', Annotation(activations, 'i')),
-                    Parameter('bias', Annotation(bias, 'i')),
-                    Parameter('dest', Annotation(dest, 'o')),
-                ],
-                """
-            ${activations.ctype} a = ${activations.load_same};
-            ${bias.ctype} b = ${bias.load_idx}(${idxs[1]});
-            
-            a += b;
-            a = min(max(-45.0f, a), 45.0f);
-            a = 1.0f / (1.0f + exp(-a));
-            
-            ${dest.store_same}(a);
-            """, guiding_array='activations')
-    
-            kernel_cache[key] = kernel.compile(thread, fast_math=True)
-    
-        # Run kernel
-        kernel_cache[key](activations, bias, dest)
-    
-        return dest
-    
-    def logistic_derivative(self, activations, delta, dest=None):
-        kernel_cache, thread = self.kernel_cache, self.thread
-        
-        if dest is None:
-            dest = delta
-        
-        key = (self.logistic_derivative, activations.shape, thread)
-        if not key in kernel_cache.keys():
-            log.info("compiling " + str(key))
-            kernel = PureParallel(
-                [
-                    Parameter('activations', Annotation(activations, 'i')),
-                    Parameter('delta', Annotation(activations, 'i')),
-                    Parameter('dest', Annotation(dest, 'o')),
-                ],
-                """
-            ${activations.ctype} a = ${activations.load_same};
-            ${delta.ctype} d = ${delta.load_same};
-            
-            d = d*a*(1.0f - a);
-            
-            ${dest.store_same}(d);
-            """, guiding_array='activations')
-    
-            kernel_cache[key] = kernel.compile(thread, fast_math=True)
-    
-        # Run kernel
-        kernel_cache[key](activations, delta, dest)
-    
-    
+
+
     def dot(self, mat1, mat2, dest, trans_a=False, trans_b=False):        
         kernel_cache, thread = self.kernel_cache, self.thread
         
@@ -263,10 +161,7 @@ class KernelContext(object):
                 mat1, mat2, out_arr=dest, transposed_a=trans_a, transposed_b=trans_b).compile(thread)
         
         kernel_cache[key](dest, mat1, mat2)
-    
-    
-    
-    
+
     def norm(self, array, dest, order, axes=None):  
         """ Calculate the norm of an array """ 
         kernel_cache, thread = self.kernel_cache, self.thread

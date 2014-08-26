@@ -10,34 +10,45 @@ log = logging.getLogger("convolution")
 
 class Convolution2DLayer(object):
     
-    def __init__(self, context, input_shape, num_units=16, filter_shape=(3,3), **kwargs):
+    def __init__(self, context, input_shape, filter_shape=(32, 4, 4), **kwargs):
         log.info("ConvolutionLayer constructor")
         self.context = context
         thr = context.thread
-        
-        d1, d2 = input_shape
-        f1, f2 = filter_shape
-        d1 = d1 - d1 % f1
-        d2 = d2 - d2 % f2
-        
-        self.input_shape = input_shape
-        self.output_shape = (d1, d2)
-        
-        
-        weights_shape = (num_units,) + filter_shape
-        
-        weights = thr.array(weights_shape, dtype=numpy.float32)
-        bias = thr.array((num_units,), dtype=numpy.float32)       
-         
-        self.weights = weights
-        self.bias = bias
-    
-    def propagate(self, activations, next_activations):
-        convolve(self.context, activations, self.weights, next_activations)
-        pass
+
+        number_channels, height_channels, width_channels = input_shape
+        number_filters, height_filters, width_filters = filter_shape
+
+        weights = numpy.random.randn(number_channels, number_filters, height_filters, width_filters).astype(numpy.float32)
+        bias = numpy.random.randn(number_filters).astype(numpy.float32)
+
+        self.weights, self.bias = context.upload(weights, bias)
+
+    def create_sate(self, input_shape, state):
+        # n, width, height = shape
+        activations_intermediate = numpy.zeros(get_output_shape(input_shape, self.weights, 'propagation')).astype(numpy.float32)
+        activations = numpy.sum(activations_intermediate, axis=1)
+        state.activations_intermediate, state.activations = state.context.upload(activations_intermediate, activations)
+
+    def create_training_state(self, input_shape, state):
+        act_shape = get_output_shape(input_shape, self.weights, 'propagation')
+        act_shape[:1] + act_shape[2:]
+        deltas = numpy.zeros(act_shape)
+        deltas_intermediate = numpy.zeros(get_output_shape(deltas, self.weights, 'backprop')).astype(numpy.float32)
+        prev_deltas = deltas_intermediate.sum(axis=2)
+        gradient_intermediate = numpy.zeros(get_output_shape(prev_deltas, deltas, 'gradient'))
+        gradient = gradient_intermediate.sum(axis=0).sum(axis=0).sum(axis=0)
+
+        state.deltas = state.context.upload(deltas)
+        state.deltas_intermediate = state.context.upload(deltas_intermediate)
+        state.gradient_intermediate = state.context.upload(gradient_intermediate)
+        state.gradient = state.context.upload(gradient)
+
+    def propagate(self, state, inputs, **kwargs):
+        convolve2d_propagation(self.context, inputs, self.weights, state.activations)
 
     def transfer(self, activations):
         # TODO: apply transfer function
+        self.context.add(state.activations, self.bias)
         pass
 
     def derivative(self, activations, delta):

@@ -12,13 +12,13 @@ class EarlyStopping(object):
     def __init__(self, **kwargs):
         super(EarlyStopping, self).__init__(**kwargs)
         log.info("EarlyStopping constructor")
-        
+
+    def on_new_best(self, old_best, new_best):
+        self.min_steps = max(self.min_steps, 2 * self.steps + 1)
+
     def is_finished(self):
-        if self.errors['current']['test'] < self.errors['best']['test']:            
-            self.min_steps = max(self.min_steps, 2 * self.steps + 1)
-            self.errors['best']['test'] = self.errors['current']['test']
-        if self.steps < self.min_steps:            
+        if self.steps < self.min_steps:
             return False
-        else:          
-            log.info("Early Stopping - finished after %d steps" % self.steps)              
+        else:
+            log.info("Early Stopping - finished after %d steps" % self.steps)
             return True

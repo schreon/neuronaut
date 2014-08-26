@@ -1,96 +1,57 @@
-
-
-
-
-from neuro import kernels
 import logging
-import neuro
+
 import numpy
-import time
+
 log = logging.getLogger("training")
 
-class TestState(object):
+class Trainer(object):
     '''
-    Holds the state belonging to a neural network during testing. 
+    Holds the state of a Trainer Session.
     '''
-    
-    def __init__(self, **kwargs):        
-        super(TestState, self).__init__(**kwargs)
-        log.info("TestState constructor")    
-        net = kwargs['network']
-        thread = net.context.thread
-        
-        # only the deltas of the output layer are necessary
-        # for testing purposes
-        deltas_shape = (self.size,) + net.layers[-1].output_shape
-        deltas = thread.array(deltas_shape, numpy.float32)
-        self.deltas = [deltas]
-        
-        # in this array, the current error (for example MSE) will be stored
-        self.error = thread.array((1,), dtype=net.targets_dtype)
 
-class TrainingState(object):
-    '''
-    Holds the state belonging to a neural network during training. 
-    '''
-    
-    def __init__(self, **kwargs):        
-        super(TrainingState, self).__init__(**kwargs)
-        log.info("TrainingState constructor")    
-        net = kwargs['network']
-        self.context = net.context
-        thread = net.context.thread
-        
-        # arrays for the deltas are necessary for all layers
-        # except the input layer        
-        self.deltas = []
-        for layer in net.layers:
-            deltas_shape = (self.size,) + layer.output_shape
-            deltas = thread.array(deltas_shape, numpy.float32)
-            self.deltas.append(deltas)
-        
-        # for every weight array, a gradient array is necessary
-        self.gradients = []
-        for weights, bias in net.weights:
-            gradients = thread.array(weights.shape, numpy.float32)
-            gradients_bias = thread.array(bias.shape, numpy.float32)
-            self.gradients.append((gradients, gradients_bias))
-        
-        # in this array, the current error (e.g. MSE) will be stored    
-        self.error = thread.array((1,), dtype=net.targets_dtype)
+    def __init__(self, network=None, training_data=None, test_data=None, **kwargs):
+        log.info("Trainer constructor")
+        if network is None:
+            raise Exception("the 'network' keyword parameter must be specified")
+        if network is None:
+            raise Exception("the 'training_data' keyword parameter must be specified")
 
-class FullBatchTrainer(object):
-    '''
-    Full Batch Trainer.
-    '''
-    
-    def __init__(self, **kwargs):
-        log.info("FullBatchTrainer constructor")
-        self.network = kwargs['network']
-        self.seed = self.network.seed
-        self.context = self.network.context
+        self.network = network
+        self.context = network.context
+        self.training_data = training_data
+        self.test_data = test_data
+
         self.steps = 0
-        self.errors = {
-           'current' : {
-                        'test' : numpy.inf,
-                        'train' : numpy.inf
-                        },
-           'best' : {
-                        'test' : numpy.inf,
-                        'train' : numpy.inf
-                        },
-           'history' : {
-                        'test' : [],
-                        'train' : []
-                        }
-           }
         self.min_steps = kwargs.get('min_steps', 1000)
-        self.validation_frequency = kwargs.get('validation_frequency', 5)
-        self.validate_train = kwargs.get('validate_train', False) # MSE also on the training set?
-        self.logging_frequency = kwargs.get('logging_frequency', 1.0)
-        
-        self.TrainingState = neuro.create("TrainingState", neuro.model.NetworkState, neuro.training.TrainingState)
-        self.TestState = neuro.create("TestState", neuro.model.NetworkState, neuro.training.TestState)
+
+        self.test_state = network.create_state(self.get_num_test_patterns())
+        self.training_state = network.create_state(self.get_batch_size())
+
+        # Layer State initialization
+        for layer, layer_state in zip(self.network.layers, self.training_state.layers):
+            layer.initialize_training_state(layer_state)
+
+        # Trainer State initialization
+        self.initialize_test_state(self.test_state, **kwargs)
+        self.initialize_training_state(self.training_state, **kwargs)
+
+    def initialize_training_state(self, training_state, **kwargs):
+        pass
+
+    def initialize_test_state(self, test_state):
+        pass
+
+    def get_batch_size(self):
+        return self.training_data[0].shape[0]
+
+    def get_num_training_patterns(self):
+        return self.training_data[0].shape[0]
+
+    def get_num_test_patterns(self):
+        return self.test_data[0].shape[0]
+
+    def on_new_best(self, old_best, new_best):
+        pass
 
     def is_finished(self):
         """ Stop as soon as the maximum number of steps has been reached """
@@ -98,87 +59,80 @@ class FullBatchTrainer(object):
             return True
         else:
             return False
-    
-    def train_step(self, training_state, inputs, targets, **kwargs):
-        """ Perform a training step """
-        self.network.propagate(training_state, inputs, **kwargs)
-        self.network.delta(training_state, targets)                        
-        self.calculate_gradient(inputs, targets, training_state)
-        self.update_weights(training_state)
-    
 
-    def train(self, training_state, test_state, inputs, targets, inputs_test, targets_test, **kwargs):
+    def get_training_patterns(self):
+        return self.training_data
+
+    def get_test_patterns(self):
+        return self.test_data
+
+    def train_step(self, **kwargs):
+        """ Perform a training step """
+
+        inputs, targets = self.get_training_patterns()
+
+        self.network.propagate(self.training_state, inputs, **kwargs)
+        self.network.delta(self.training_state, targets)
+        self.calculate_gradient(self.training_state, inputs, targets)
+        self.update_weights(self.training_state)
+
+    def train(self, **kwargs):
         """ Train until the stopping criterion is met """
         network = self.network
-        warm_up = 10 # number of steps until time is measured
+
         while not self.is_finished():
-            # some warmup steps are necessary because the
-            # network first needs to be compiled etc.
-            if self.steps < warm_up:
-                start_time = time.time()
-                next_update = start_time + self.logging_frequency
-
             # Training Step
-            self.train_step(training_state, inputs, targets, **kwargs)
-            
-            if test_state is not None and self.steps % self.validation_frequency == 0:
-                error_test = network.error(inputs_test, targets_test, test_state)
-                self.errors['current']['test'] =  error_test
-                self.errors['history']['test'].append(self.errors['current']['test'])
-                
-                if self.validate_train:
-                    error_train = network.error(inputs, targets, training_state)
-                    self.errors['current']['train'] =  error_train
-                    self.errors['history']['train'].append(self.errors['current']['train'])
+            self.train_step(**kwargs)
             self.steps += 1
-            
-            # Measure performance
-            current_time = time.time()
-            self.steps_per_sec = (self.steps-warm_up) / (current_time - start_time)
-            if current_time > next_update:                  
-                log.info("(%d)%s: best %.4f, current %.4f, train %.4f, %.2f steps / sec" % (self.steps, network.error_measure, self.errors['best']['test'], self.errors['current']['test'], self.errors['current']['train'], self.steps_per_sec))
-                next_update += self.logging_frequency
 
+        log.info("Training finished.")
 
     def update_weights(self, state):
         """ Update the weight parameters of the network """
-        pass        
-    
-    def calculate_gradient(self, inputs, targets, state):  
+        pass
+
+    def calculate_gradient(self, states, inputs, targets):
         """ Calculate the gradient for the network weights """
         pass
 
-class SGDState(object):
+
+class FullBatchTrainer(Trainer):
     '''
-    Holds the state belonging to a network trained by Stochastic Gradient Descent
+    Full Batch Trainer.
     '''
+    
     def __init__(self, *args, **kwargs):
-        super(SGDState, self).__init__(*args, **kwargs)  
-        
-        thread = self.context.thread
-        net = kwargs['network']
-        
-        self.indices = thread.array((self.size,), dtype=numpy.int32)
-        self.inputs = thread.array((self.size,)+net.layers[0].input_shape, dtype=numpy.float32)
-        self.targets = thread.array((self.size,)+net.layers[-1].targets_shape, dtype=net.targets_dtype)
-        
-class SGDTrainer(FullBatchTrainer):
+        super(FullBatchTrainer, self).__init__(*args, **kwargs)
+        log.info("FullBatchTrainer constructor")
+
+
+class SGDTrainer(Trainer):
     '''
     Stochastic Gradient Descent trainer
     '''
     
-    def train_step(self, training_state, inputs, targets, **kwargs):
-        # sample random minibatch
-        self.context.randint(training_state.indices, 0, inputs.shape[0], seed=self.seed) 
-        
-        # copy minibatch      
-        self.context.copy_minibatch(inputs, training_state.indices, training_state.inputs)
-        self.context.copy_minibatch(targets, training_state.indices, training_state.targets)
-        
-        # pass to super train step
-        return super(SGDTrainer, self).train_step(training_state, training_state.inputs, training_state.targets, **kwargs)
+    def get_training_patterns(self):
+        inputs, targets = self.training_data
+        self.context.randint(self.indices, 0, self.get_num_training_patterns())
+        # copy minibatch
+        self.context.copy_minibatch(inputs, self.indices, self.minibatch_inputs)
+        self.context.copy_minibatch(targets, self.indices, self.minibatch_targets)
 
-    def __init__(self, *args, **kwargs):        
-        super(SGDTrainer, self).__init__(*args, **kwargs)        
-        self.minibatch_size = kwargs.get('minibatch_size', 128)        
-        self.TrainingState = neuro.create("TrainingState", self.TrainingState, SGDState)
+        return self.minibatch_inputs, self.minibatch_targets
+
+    def get_batch_size(self):
+        return self.minibatch_size
+
+    def __init__(self, *args, **kwargs):
+        self.minibatch_size = kwargs.get('minibatch_size', 128)
+        super(SGDTrainer, self).__init__(*args, **kwargs)
+        log.info("SGDTrainer constructor")
+
+
+        thread = self.context.thread
+
+        input_shape = self.network.shape[0]
+
+        self.indices = thread.array((self.minibatch_size,), dtype=numpy.int32)
+        self.minibatch_inputs = thread.array((self.minibatch_size,)+input_shape, dtype=numpy.float32)
+        self.minibatch_targets = thread.array((self.minibatch_size,)+self.network.get_target_shape(), dtype=self.network.targets_dtype)

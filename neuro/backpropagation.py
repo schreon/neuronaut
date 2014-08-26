@@ -1,15 +1,15 @@
 import logging
 log = logging.getLogger("backpropagation")
 
-class Backpropagation(object):
+class BackpropagationTrainer(object):
     '''
     Backpropagation mixin. Defines how the gradient is to be calculated.
     '''
-    def __init__(self, **kwargs):
-        super(Backpropagation, self).__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super(BackpropagationTrainer, self).__init__(*args, **kwargs)
         log.info("Backpropagation constructor")
     
-    def calculate_gradient(self, inputs, targets, state):        
+    def calculate_gradient(self, state, inputs, targets):
         '''
         Calculate the gradient using the Backpropagation algorithm.
         
@@ -23,20 +23,25 @@ class Backpropagation(object):
         net.delta(state, targets)
         
         # start at the output layer, end at the input layer
-        for i in range(1, len(state.activations)):
+        for i in reversed(range(0, len(state.layers))):
             # get the current layer   
-            layer = net.layers[-i]
+            layer = net.layers[i]
+            layer_state = state.layers[i]
+            if (i > 0):
+                layer_inputs = state.layers[i-1].activations
+            else:
+                layer_inputs = inputs
 
             # apply the derivative to the activations
             # attention: activations contain f(x), not x!
             # so the derivative implementation must consider this.
-            layer.derivative(state, -i)
+            layer.derivative(layer_state)
             
             # calculate the gradient
-            layer.calculate_gradient(state, -i)
+            layer.calculate_gradient(layer_state, layer_inputs)
      
             # backpropagate deltas to the previous layer
             # this is not necessary for the input layer
-            if i < len(state.activations)-1:
+            if i > 0:
                 # backpropagate the error through the weights        
-                layer.backpropagate(state, -i)
+                layer.backpropagate(layer_state, state.layers[i-1].deltas)
