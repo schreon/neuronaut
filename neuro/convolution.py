@@ -1,5 +1,6 @@
 import logging
 from neuro import reshape
+from neuro.model import LayerState
 
 import numpy
 from reikna.algorithms import PureParallel
@@ -7,6 +8,9 @@ from reikna.core import Parameter
 from reikna.core.signature import Annotation
 
 log = logging.getLogger("convolution")
+
+class Convolution2DState(LayerState):
+    pass
 
 class Convolution2DLayer(object):
     
@@ -23,11 +27,26 @@ class Convolution2DLayer(object):
 
         self.weights, self.bias = context.upload(weights, bias)
 
-    def create_sate(self, input_shape, state):
+        self.input_shape = input_shape
+        self.output_shape = get_output_shape(input_shape, self.weights, 'propagation')[1:]
+
+    def create_state(self, num_patterns, state=None):
         # n, width, height = shape
-        activations_intermediate = numpy.zeros(get_output_shape(input_shape, self.weights, 'propagation')).astype(numpy.float32)
+        activation_shape = (num_patterns,) + get_output_shape(self.input_shape, self.weights, 'propagation')
+        activations_intermediate = numpy.zeros(activation_shape).astype(numpy.float32)
         activations = numpy.sum(activations_intermediate, axis=1)
-        state.activations_intermediate, state.activations = state.context.upload(activations_intermediate, activations)
+        if state is None:
+            state = Convolution2DState(activations.shape)
+        state.activations_intermediate, state.activations = self.context.upload(activations_intermediate, activations)
+        return state
+
+    def initialize_training_state(self, state):
+        log.info("Convolution2DLayer initialize_training_state")
+        thread = self.context.thread
+        state.deltas = thread.array(state.activations.shape, numpy.float32)
+        state.gradients = thread.array(self.weights.shape, numpy.float32)
+        state.gradients_bias = thread.array(self.bias.shape, numpy.float32)
+        return state
 
     def create_training_state(self, input_shape, state):
         act_shape = get_output_shape(input_shape, self.weights, 'propagation')
@@ -63,36 +82,41 @@ class Convolution2DLayer(object):
         # TODO: convolve weights over deltas
         pass
 
-def get_output_shape(array1, array2, mode):
+def get_output_shape(shape1, shape2, mode):
     """ Returns the shape of the intermediate array and the expected output array for the given arrays and mode """
+
+    if not isinstance(shape1, tuple):
+        shape1 = shape1.shape
+    if not isinstance(shape2, tuple):
+        shape2 = shape2.shape
 
     output_shape = None
 
     if mode == 'propagation':
-        n, channels_1, width, height = array1.shape # inputs
-        channels, filters, f_width, f_height = array2.shape # weights
+        channels_1, width, height = shape1 # inputs
+        channels, filters, f_width, f_height = shape2 # weights
         assert channels == channels_1
 
         out_0 = width - f_width + 1
         out_1 = height - f_height + 1
-        output_shape = (n, channels, filters, out_0, out_1)
+        output_shape = (channels, filters, out_0, out_1)
 
     if mode == 'backprop':
-        n, filters_1, width, height = array1.shape # deltas
-        channels, filters, f_width, f_height = array2.shape # weights
+        n, filters_1, width, height = shape1 # deltas
+        channels, filters, f_width, f_height = shape2 # weights
         assert filters_1 == filters
 
         out_0 = width + f_width - 1
         out_1 = height + f_height - 1
-        output_shape = (n, channels, filters, out_0, out_1)
+        output_shape = (channels, filters, out_0, out_1)
 
     if mode == 'gradient':
-        n_1, channels, p_width, p_height = array1.shape # prev_deltas
-        n, filters, d_width, d_height = array2.shape # deltas
+        n_1, channels, p_width, p_height = shape1 # prev_deltas
+        n, filters, d_width, d_height = shape2 # deltas
         assert n_1 == n
         out_0 = p_width - d_width + 1
         out_1 = p_height - d_height + 1
-        output_shape = (n, d_width, d_height, channels, filters, out_0, out_1)
+        output_shape = (d_width, d_height, channels, filters, out_0, out_1)
 
     if output_shape is None:
         raise Exception("Invalid mode:", str(mode))

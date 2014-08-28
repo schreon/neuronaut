@@ -48,7 +48,10 @@ class Trainer(object):
         return self.training_data[0].shape[0]
 
     def get_num_test_patterns(self):
-        return self.test_data[0].shape[0]
+        if self.test_data is not None:
+            return self.test_data[0].shape[0]
+        else:
+            return 0
 
     def on_new_best(self, old_best, new_best):
         pass

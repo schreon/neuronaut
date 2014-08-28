@@ -37,10 +37,10 @@ class DenseLayer(object):
 
         self.targets_shape = self.output_shape
 
-    def create_state(self, n, state=None):
+    def create_state(self, num_patterns, state=None):
         log.info("DenseLayer create_state")
         thread = self.context.thread
-        activation_shape = (n,) + self.output_shape
+        activation_shape = (num_patterns,) + self.output_shape
         if state is None:
             state = DenseLayerState(activation_shape)
         state.activations = thread.array(activation_shape, numpy.float32)

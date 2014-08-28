@@ -68,8 +68,6 @@ class FeedForwardNeuralNetwork(object):
              
         self.shape += (new_layer.output_shape,)
 
-        # save additional references to the layers' weights
-        self.weights.append((new_layer.weights, new_layer.bias))
 
 
     def propagate(self, state, inputs, **kwargs):
