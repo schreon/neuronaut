@@ -51,10 +51,10 @@ def softmax(ctx, activations, bias, dest=None):
 
     kernel_cache[key](activations, bias, dest)
 
-class SoftmaxLayer(object):
+class Softmax(object):
     def __init__(self, context, *args, **kwargs):
-        log.info("SoftmaxLayer constructor")
-        super(SoftmaxLayer, self).__init__(context, *args, **kwargs)
+        log.info("Softmax constructor")
+        super(Softmax, self).__init__(context, *args, **kwargs)
 
     def transfer(self, state):
         softmax(self.context, state.activations, self.bias)

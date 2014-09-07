@@ -69,10 +69,10 @@ def logistic_derivative(context, activations, delta, dest=None):
     # Run kernel
     kernel_cache[key](activations, delta, dest)
 
-class LogisticLayer(object):
+class Logistic(object):
     def __init__(self, context, *args, **kwargs):
-        log.info("LogisticLayer constructor")
-        super(LogisticLayer, self).__init__(context, *args, **kwargs)
+        log.info("Logistic constructor")
+        super(Logistic, self).__init__(context, *args, **kwargs)
 
     def transfer(self, state):
         logistic(self.context, state.activations, self.bias)

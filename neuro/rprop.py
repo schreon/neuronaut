@@ -102,13 +102,13 @@ def rprop_kernel(ctx, weights, gradient, last_gradient, step_sizes, parameters):
 #             sw.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
 #             sb.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
             
-class RPROP(object):
+class RPROPMinus(object):
     '''
     The RPROP learning algorithm (Riedmiller 1992).
     This is the RPROP- version without error backtracking.
     '''
     def __init__(self, **kwargs):
-        super(RPROP, self).__init__(**kwargs)
+        super(RPROPMinus, self).__init__(**kwargs)
         log.info("RPROP constructor")
               
         self.parameters = {
@@ -121,7 +121,7 @@ class RPROP(object):
         }
 
     def initialize_training_state(self, training_state, **kwargs):
-        super(RPROP, self).initialize_training_state(training_state, **kwargs)
+        super(RPROPMinus, self).initialize_training_state(training_state, **kwargs)
 
         log.info("RPROP create_training_state")
         ctx = self.context
@@ -143,7 +143,7 @@ class RPROP(object):
 
 
     def update_weights(self, training_state):
-        super(RPROP, self).update_weights(training_state)
+        super(RPROPMinus, self).update_weights(training_state)
         
         network = self.network
         ctx = self.context

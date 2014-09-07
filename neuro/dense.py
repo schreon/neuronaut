@@ -98,3 +98,6 @@ class DenseLayer(object):
         prev_delta = reshape(prev_delta, desired_shape)
         ctx = self.context
         ctx.dot(deltas, weights, prev_delta, trans_b=True)
+
+    def download(self):
+        return self.weights.get(), self.bias.get()

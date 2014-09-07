@@ -111,10 +111,7 @@ class FeedForwardNeuralNetwork(object):
             layer.reset(std=0.01)
             
     def download(self):
-        wgts = []
-        for layer in self.layers:
-            wgts.append(layer.download())
-        return wgts
+        return [layer.download() for layer in self.layers]
     
     def upload(self, weights):
         for i, w in enumerate(self.weights):
