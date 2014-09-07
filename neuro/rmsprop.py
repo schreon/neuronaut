@@ -82,40 +82,6 @@ def rms_update(ctx, weights, gradient, squared_gradient, momentum, learn_rates, 
     # Run kernel
     kernel_cache[key](weights, gradient, squared_gradient, momentum, learn_rates)
 
-class RMSPropState(object):
-    '''
-    Holds the state belonging to RMSProp. 
-    '''
-    
-    def __init__(self, **kwargs):        
-        super(RMSPropState, self).__init__(**kwargs)
-        ctx = kwargs['network'].context
-        
-        self.squared_gradients = []
-        self.momentum = []
-        self.learn_rates = []
-        for gw, gb in self.gradients:
-            sgw = ctx.thread.empty_like(gw)
-            sgb = ctx.thread.empty_like(gb)
-            self.squared_gradients.append((sgw, sgb))
-
-            sgw.fill(numpy.float32(1.0))
-            sgb.fill(numpy.float32(1.0))
-            
-            mw = ctx.thread.empty_like(gw)
-            mb = ctx.thread.empty_like(gb)
-            self.momentum.append((mw, mb))
-            
-            mw.fill(numpy.float32(0.0))
-            mb.fill(numpy.float32(0.0))
-            
-            lrw = ctx.thread.empty_like(gw)
-            lrb = ctx.thread.empty_like(gb)
-            self.learn_rates.append((lrw, lrb))
-            
-            lrw.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
-            lrb.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
-
 class RMSProp(object):
     
     def __init__(self, **kwargs):

@@ -115,6 +115,13 @@ class ClassificationNetwork(object):
         self.targets_dtype = numpy.int32
         self.error_measure = "Classification Errors"
 
+    def create_state(self, num_patterns):
+        state = super(ClassificationNetwork, self).create_state(num_patterns)
+        ctx = self.context
+        shp = (num_patterns,)
+        state.classification_errors = ctx.thread.array(shp, dtype=numpy.int32)
+        return state
+
     def get_target_shape(self):
         # in a classification network, the target values are just the index of the correct class
         return ()
@@ -145,10 +152,3 @@ class ClassificationNetwork(object):
         self.context.sum(network_state.classification_errors, network_state.error)
 
         return network_state.error.get()
-
-    def create_state(self, num_patterns):
-        state = super(ClassificationNetwork, self).create_state(num_patterns)
-        ctx = self.context
-        shp = (num_patterns,)
-        state.classification_errors = ctx.thread.array(shp, dtype=numpy.int32)
-        return state

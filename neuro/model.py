@@ -100,15 +100,6 @@ class FeedForwardNeuralNetwork(object):
         :param targets: The desired target values.
         '''
 
-    def error(self, inputs, targets, state):
-        """
-        Calculate the mean squared error on the given inputs/targets pairs
-        """
-        self.propagate(states, inputs)
-        self.delta(states, targets)
-        self.context.norm(states[-1].deltas, states[-1].error, 2.0)
-        return numpy.sqrt(states[-1].error.get()[0]**2 / states[-1].size)
-
     def reset(self, std=0.01):
         '''
         Fill the weight matrices with random values from a normal distribution with the mean=0.0.
@@ -160,19 +151,45 @@ class NaNMask(object):
         self.context.nan_to_zeros(inputs, inputs)
         super(NaNMask, self).propagate(inputs, states, **kwargs)
 
-class Regression(object):
+class RegressionNetwork(object):
     """
     Defines the ouput of a neural network to solve a regression task.
     """
 
     def __init__(self, **kwargs):        
-        super(Regression, self).__init__(**kwargs)
+        super(RegressionNetwork, self).__init__(**kwargs)
         log.info("Regression constructor")
 
+    def create_state(self, num_patterns):
+        state = super(RegressionNetwork, self).create_state(num_patterns)
+        ctx = self.context
+        shp = (num_patterns,) + self.shape[-1]
+        state.regression_errors = ctx.thread.array(shp, dtype=numpy.float32)
+        return state
     
-    def delta(self, states, targets):
+    def delta(self, network_state, targets):
         """
         The error is the difference (targets - netoutput).
         """        
-        super(Regression, self).delta(states, targets)
-        self.context.sub(targets, states[-1].activations, states[-1].deltas)
+        super(RegressionNetwork, self).delta(network_state, targets)
+
+        outputs = network_state.layers[-1].activations
+        deltas = network_state.layers[-1].deltas
+
+        self.context.sub(targets, outputs, deltas)
+
+    def get_target_dtype(self):
+        return numpy.float32
+
+    def error(self, inputs, targets, network_state):
+        """
+        Calculate the mean squared error on the given inputs/targets pairs
+        """
+        self.propagate(network_state, inputs)
+        outputs = network_state.layers[-1].activations
+        error = network_state.error
+        deltas = network_state.regression_errors
+
+        self.context.sub(targets, outputs, deltas)
+        self.context.norm(deltas, error, 2.0)
+        return numpy.sqrt(error.get()[0]**2 / targets.shape[0]*targets.shape[1])

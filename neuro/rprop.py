@@ -76,31 +76,31 @@ def rprop_kernel(ctx, weights, gradient, last_gradient, step_sizes, parameters):
     # Run kernel
     kernel_cache[key](weights, gradient, last_gradient, step_sizes)
 
-class RPROPState(object):
-    '''
-    Holds the state belonging to RPROP. 
-    '''
-    
-    def __init__(self, **kwargs):        
-        super(RPROPState, self).__init__(**kwargs)
-        ctx = kwargs['network'].context
-                
-        self.last_gradients = []
-        self.step_sizes = []
-        for gw, gb in self.gradients:
-            lgw = ctx.thread.empty_like(gw)
-            lgb = ctx.thread.empty_like(gb)
-            self.last_gradients.append((lgw, lgb))
-            
-            lgw.fill(numpy.float32(0.0))
-            lgb.fill(numpy.float32(0.0))
-            
-            sw = ctx.thread.empty_like(gw)
-            sb = ctx.thread.empty_like(gb)
-            self.step_sizes.append((sw, sb))
-
-            sw.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
-            sb.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
+# class RPROPState(object):
+#     '''
+#     Holds the state belonging to RPROP.
+#     '''
+#
+#     def __init__(self, **kwargs):
+#         super(RPROPState, self).__init__(**kwargs)
+#         ctx = kwargs['network'].context
+#
+#         self.last_gradients = []
+#         self.step_sizes = []
+#         for gw, gb in self.gradients:
+#             lgw = ctx.thread.empty_like(gw)
+#             lgb = ctx.thread.empty_like(gb)
+#             self.last_gradients.append((lgw, lgb))
+#
+#             lgw.fill(numpy.float32(0.0))
+#             lgb.fill(numpy.float32(0.0))
+#
+#             sw = ctx.thread.empty_like(gw)
+#             sb = ctx.thread.empty_like(gb)
+#             self.step_sizes.append((sw, sb))
+#
+#             sw.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
+#             sb.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
             
 class RPROP(object):
     '''
@@ -120,24 +120,43 @@ class RPROP(object):
           'l2_decay' : numpy.float32(kwargs.get('l2_decay', 0.0))
         }
 
-        self.TrainingState = neuro.create("TrainingState", self.TrainingState, RPROPState)
+    def initialize_training_state(self, training_state, **kwargs):
+        super(RPROP, self).initialize_training_state(training_state, **kwargs)
 
-    def update_weights(self, state):
-        super(RPROP, self).update_weights(state)
-        
-        net = self.network
+        log.info("RPROP create_training_state")
         ctx = self.context
+        network = self.network
+
+        for layer, layer_state in zip(network.layers, training_state.layers):
+
+            lgw = ctx.thread.empty_like(layer.weights)
+            lgb = ctx.thread.empty_like(layer.bias)
+            lgw.fill(numpy.float32(0.0))
+            lgb.fill(numpy.float32(0.0))
+            layer_state.last_gradients = (lgw, lgb)
+
+            sw = ctx.thread.empty_like(layer.weights)
+            sb = ctx.thread.empty_like(layer.bias)
+            sw.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
+            sb.fill(numpy.float32(kwargs.get('ini_step_size', 0.0001)))
+            layer_state.step_sizes = (sw, sb)
+
+
+    def update_weights(self, training_state):
+        super(RPROP, self).update_weights(training_state)
         
-        weights = net.weights
-        gradients = state.gradients
-        last_gradients = state.last_gradients
-        step_sizes = state.step_sizes
+        network = self.network
+        ctx = self.context
+
         
-        for i in range(len(gradients)):
-            w, b =  weights[i]
-            gw, gb = gradients[i]
-            lgw, lgb = last_gradients[i]
-            sgw, sgb = step_sizes[i]
+        for layer, layer_state in zip(network.layers, training_state.layers):
+            weights = layer.weights
+            bias = layer.bias
+
+            gw, gb = layer_state.gradients, layer_state.gradients_bias
+
+            lgw, lgb = layer_state.last_gradients
+            sgw, sgb = layer_state.step_sizes
             
-            rprop_kernel(ctx, w, gw, lgw, sgw, self.parameters)
-            rprop_kernel(ctx, b, gb, lgb, sgb, self.parameters)
+            rprop_kernel(ctx, weights, gw, lgw, sgw, self.parameters)
+            rprop_kernel(ctx, bias, gb, lgb, sgb, self.parameters)
