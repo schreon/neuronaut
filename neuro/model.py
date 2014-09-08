@@ -189,4 +189,4 @@ class RegressionNetwork(object):
 
         self.context.sub(targets, outputs, deltas)
         self.context.norm(deltas, error, 2.0)
-        return numpy.sqrt(error.get()[0]**2 / targets.shape[0]*targets.shape[1])
+        return numpy.sqrt(error.get()[0]**2 / (targets.shape[0]*targets.shape[1]))
