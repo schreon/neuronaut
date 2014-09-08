@@ -16,20 +16,16 @@ You can install neuronaut using pip:
 
 Getting started
 ===============
-- choose backend + create context
-- upload numpy arrays
-- create network
-- create trainer
-- create evaluator
+See the [neuronaut-tests](https://github.com/schreon/neuronaut-tests) repository.
 
 Available mixins
 =====================
-stub
+TODO
 
 Write your own mixins
 =====================
-stub
+TODO
 
 Write your own activation function
 ==================================
-stub
+TODO
