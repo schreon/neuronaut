@@ -32,6 +32,7 @@ class History(object):
         self.validation_frequency = kwargs.get('validation_frequency', 5)
         self.validate_train = kwargs.get('validate_train', False) # MSE also on the training set?
         self.logging_frequency = kwargs.get('logging_frequency', 1.0)
+        self.out_norm = kwargs.get('out_norm', (0.0, 1.0))
         self.start_time = None
         self.next_update = 0
 

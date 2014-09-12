@@ -38,7 +38,7 @@ class Trainer(object):
     def initialize_training_state(self, training_state, **kwargs):
         pass
 
-    def initialize_test_state(self, test_state):
+    def initialize_test_state(self, test_state, **kwargs):
         pass
 
     def get_batch_size(self):
