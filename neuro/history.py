@@ -48,6 +48,7 @@ class History(object):
             self.errors['history']['test'].append(self.errors['current']['test'])
 
             if error_test < self.errors['best']['test']:
+                self.best_step = self.steps
                 old_best = self.errors['best']['test']
                 self.errors['best']['test'] = error_test
                 self.on_new_best(old_best, error_test)
