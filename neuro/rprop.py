@@ -112,12 +112,12 @@ class RPROPMinus(object):
         log.info("RPROP constructor")
               
         self.parameters = {
-          'min_step_size' : numpy.float32(kwargs.get('min_step_size', 0.00000001)),
-          'max_step_size' : numpy.float32(kwargs.get('max_step_size', 0.01)),
-          'punish_factor' : numpy.float32(kwargs.get('punish_factor', 0.5)),
-          'reward_factor' : numpy.float32(kwargs.get('reward_factor', 1.2)),
-          'l1_decay' : numpy.float32(kwargs.get('l1_decay', 0.0)),
-          'l2_decay' : numpy.float32(kwargs.get('l2_decay', 0.0))
+          'min_step_size' : float(kwargs.get('min_step_size', 0.00000001)),
+          'max_step_size' : float(kwargs.get('max_step_size', 0.01)),
+          'punish_factor' : float(kwargs.get('punish_factor', 0.5)),
+          'reward_factor' : float(kwargs.get('reward_factor', 1.2)),
+          'l1_decay' : float(kwargs.get('l1_decay', 0.0)),
+          'l2_decay' : float(kwargs.get('l2_decay', 0.0))
         }
 
     def initialize_training_state(self, training_state, **kwargs):
